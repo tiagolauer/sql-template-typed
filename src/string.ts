@@ -21,9 +21,19 @@ type CollapseSpaces<S extends string> = S extends `${infer Before}  ${infer Afte
   ? CollapseSpaces<`${Before} ${After}`>
   : S;
 
+type RemoveSemicolons<S extends string> = S extends `${infer Before};${infer After}`
+  ? RemoveSemicolons<`${Before} ${After}`>
+  : S;
+
 export type Normalize<S extends string> = Trim<
-  CollapseSpaces<WhitespaceToSpace<S>>
+  CollapseSpaces<WhitespaceToSpace<RemoveSemicolons<S>>>
 >;
+
+export type Unquote<S extends string> = S extends `"${infer Inner}"`
+  ? Inner
+  : S extends `[${infer Inner}]`
+    ? Inner
+    : S;
 
 export type FirstWord<S extends string> = S extends `${infer Head} ${string}`
   ? Head

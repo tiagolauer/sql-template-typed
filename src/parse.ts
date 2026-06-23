@@ -5,6 +5,7 @@ import type {
   StripQualifier,
   Qualifier,
   IsKeyword,
+  Unquote,
 } from './string.js';
 import type {
   IsFunctionCall,
@@ -100,15 +101,15 @@ type SplitColumnList<S extends string> = S extends `${infer Head},${infer Tail}`
 
 type OutputName<Expression extends string> = IsFunctionCall<Expression> extends true
   ? FunctionOutputName<Expression>
-  : StripQualifier<Expression>;
+  : Unquote<StripQualifier<Expression>>;
 
 type ParseColumnEntry<Entry extends string> =
   Entry extends `${infer Expression} ${infer Middle} ${infer Alias}`
     ? IsKeyword<Middle, 'as'> extends true
-      ? [Trim<Alias>, Trim<Expression>]
+      ? [Unquote<Trim<Alias>>, Trim<Expression>]
       : [OutputName<Entry>, Entry]
     : Entry extends `${infer Expression} ${infer Alias}`
-      ? [Trim<Alias>, Trim<Expression>]
+      ? [Unquote<Trim<Alias>>, Trim<Expression>]
       : [OutputName<Trim<Entry>>, Trim<Entry>];
 
 type ParseColumnEntries<Columns extends string[]> = {
@@ -216,23 +217,20 @@ type ResolveColumnType<
 > = IsFunctionCall<Expression> extends true
   ? FunctionReturnType<Expression>
   : Qualifier<Expression> extends ''
-    ? BareColumnType<DB, Sources, Expression, Strict>
-    : QualifiedColumnType<DB, Sources, Qualifier<Expression>, StripQualifier<Expression>, Strict>;
+    ? BareColumnType<DB, Sources, Unquote<StripQualifier<Expression>>, Strict>
+    : QualifiedColumnType<
+        DB,
+        Sources,
+        Unquote<Qualifier<Expression>>,
+        Unquote<StripQualifier<Expression>>,
+        Strict
+      >;
 
 export type ResolveColumnLoose<
   DB extends SchemaLike,
   Sources extends Source[],
   Expression extends string,
 > = ResolveColumnType<DB, Sources, Expression, false>;
-
-type RowFromColumnEntries<
-  DB extends SchemaLike,
-  Sources extends Source[],
-  Entries extends [string, string][],
-  Strict extends boolean,
-> = {
-  [Entry in Entries[number] as Entry[0]]: ResolveColumnType<DB, Sources, Entry[1], Strict>;
-};
 
 type CollectRowErrors<Row> = {
   [Key in keyof Row]: Row[Key] extends QueryTypeError<infer Message>
@@ -241,15 +239,6 @@ type CollectRowErrors<Row> = {
 }[keyof Row];
 
 type SurfaceErrors<Row> = [CollectRowErrors<Row>] extends [never] ? Row : CollectRowErrors<Row>;
-
-type BuildRow<
-  DB extends SchemaLike,
-  Sources extends Source[],
-  Entries extends [string, string][],
-  Strict extends boolean,
-> = Strict extends true
-  ? SurfaceErrors<RowFromColumnEntries<DB, Sources, Entries, true>>
-  : RowFromColumnEntries<DB, Sources, Entries, false>;
 
 type MergeSourceColumns<DB extends SchemaLike, S extends Source> = S['table'] extends keyof DB
   ? { [Column in keyof DB[S['table']]]: ApplyNull<DB[S['table']][Column], S['nullable']> }
@@ -285,6 +274,47 @@ type StarRow<
     ? Flatten<MergedStarColumns<DB, Sources>>
     : unknown;
 
+type StarColumnsForAlias<
+  DB extends SchemaLike,
+  Sources extends Source[],
+  Name extends string,
+> = FindSourceByName<Sources, Name> extends infer Found
+  ? [Found] extends [never]
+    ? unknown
+    : Found extends Source
+      ? MergeSourceColumns<DB, Found>
+      : unknown
+  : unknown;
+
+type EntryContribution<
+  DB extends SchemaLike,
+  Sources extends Source[],
+  Entry extends [string, string],
+  Strict extends boolean,
+> = Entry[1] extends '*'
+  ? MergedStarColumns<DB, Sources>
+  : StripQualifier<Entry[1]> extends '*'
+    ? StarColumnsForAlias<DB, Sources, Unquote<Qualifier<Entry[1]>>>
+    : { [Key in Entry[0]]: ResolveColumnType<DB, Sources, Entry[1], Strict> };
+
+type BuildMixed<
+  DB extends SchemaLike,
+  Sources extends Source[],
+  Entries extends [string, string][],
+  Strict extends boolean,
+> = Entries extends [infer Head extends [string, string], ...infer Tail extends [string, string][]]
+  ? EntryContribution<DB, Sources, Head, Strict> & BuildMixed<DB, Sources, Tail, Strict>
+  : unknown;
+
+type BuildSelection<
+  DB extends SchemaLike,
+  Sources extends Source[],
+  Entries extends [string, string][],
+  Strict extends boolean,
+> = Strict extends true
+  ? SurfaceErrors<Flatten<BuildMixed<DB, Sources, Entries, true>>>
+  : Flatten<BuildMixed<DB, Sources, Entries, false>>;
+
 type IsSelectAll<Columns extends string> = Trim<Columns> extends '*' ? true : false;
 
 type EmptyRow = Record<string, never>;
@@ -301,7 +331,7 @@ type InferRowWith<
     ? EmptyRow
     : IsSelectAll<Columns> extends true
       ? StarRow<DB, Sources, Strict>
-      : BuildRow<
+      : BuildSelection<
           DB,
           Sources,
           ParseColumnEntries<SplitColumnList<Columns>> extends [string, string][]

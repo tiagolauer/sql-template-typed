@@ -352,9 +352,10 @@ hovers and breaking any code that treats them as real data.
 
 ### 9. Joins
 
-`INNER JOIN`, `LEFT [OUTER] JOIN`, and `CROSS JOIN` are supported, with table
-aliases and any number of joins. Qualified columns (`alias.column`) resolve to
-the aliased table; unqualified columns are searched across every joined table.
+`INNER`, `LEFT`, `RIGHT`, `FULL` (with optional `OUTER`), and `CROSS` joins are
+supported, with table aliases and any number of joins. Qualified columns
+(`alias.column`) resolve to the aliased table; unqualified columns are searched
+across every joined table. `alias.*` expands one table; a bare `*` expands all.
 
 ```ts
 const rows = await db.query(
@@ -363,8 +364,8 @@ const rows = await db.query(
 //     rows.value ^? { name: string; title: string }[]
 ```
 
-A `LEFT JOIN` makes the right-hand table's columns nullable, because those rows
-may not exist:
+An outer join makes the optional side's columns nullable: `LEFT` nulls the
+right-hand table, `RIGHT` nulls the left-hand table, and `FULL` nulls both.
 
 ```ts
 const rows = await db.query(
@@ -506,7 +507,10 @@ this.**
 | `RETURNING` | `insert into users (name) values ($1) returning id` |
 | Nullable columns | `bio: string \| null` → `{ bio: string \| null }` |
 | Joins | `select u.name, p.title from users u join posts p on u.id = p.user_id` |
-| `LEFT JOIN` nullability | right-hand columns become `T \| null` |
+| `LEFT`/`RIGHT`/`FULL` nullability | outer-joined side(s) become `T \| null` |
+| Qualified / mixed star | `select u.*, p.title from ...`, `select *, extra from ...` |
+| Quoted / schema-qualified ids | `select "id" from public."users"` |
+| Trailing semicolon | `select id from users;` |
 | Typed parameters | `where id = $1` → `query(sql, id: number)` |
 | Strict mode | `{ strict: true }` → unknown column becomes a `QueryTypeError` |
 
@@ -514,16 +518,13 @@ this.**
 
 This is a focused tool for the common read path, not a full SQL grammar:
 
-- **`SELECT *` must be the only item.** `select *, extra` and `alias.*` are not
-  supported.
+- **No subqueries or CTEs yet.** Derived tables (`from (select ...) x`) and
+  `WITH ... AS (...)` are not parsed.
 - **Function arguments must not contain spaces.** `count(*)`, `lower(name)`,
   `sum(price)` work; `count(distinct id)` and `concat(a, b)` (space after the
   comma) do not.
 - **Aggregates assume numeric output.** `min`/`max` resolve to `number` even
   over a text column; unrecognized functions resolve to `unknown`.
-- **`RIGHT`/`FULL` joins are approximate.** They are parsed, but only the
-  right-hand table is made nullable — the left-hand nullability a `RIGHT`/`FULL`
-  join implies is not applied. `INNER`, `LEFT`, and `CROSS` are exact.
 - **`select *` across a join merges columns by name.** When two tables share a
   column name (e.g. both have `id`), the types are intersected rather than kept
   separate. Alias the columns to keep them distinct.
@@ -531,6 +532,9 @@ This is a focused tool for the common read path, not a full SQL grammar:
   `where id=$1` is not. `IN (...)` lists and parameters inside `INSERT ...
   VALUES` are not typed (they fall back to a flexible `unknown[]`). Numbered
   placeholders are assumed to appear in ascending order (`$1`, `$2`, ...).
+- **Quoted identifiers** use `"..."` (standard) or `[...]` (SQL Server);
+  MySQL backticks are not supported. Schema-qualified tables (`public.users`)
+  resolve by their final segment (`users`).
 - **Unknown columns, tables, or aliases resolve to `unknown`** by default — pass
   `{ strict: true }` to turn them into a `QueryTypeError` instead.
 

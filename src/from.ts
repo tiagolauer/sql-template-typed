@@ -1,4 +1,11 @@
-import type { Trim, FirstWord, DropFirstWord, IsKeyword } from './string.js';
+import type {
+  Trim,
+  FirstWord,
+  DropFirstWord,
+  IsKeyword,
+  Unquote,
+  StripQualifier,
+} from './string.js';
 
 export interface Source {
   table: string;
@@ -33,32 +40,35 @@ type TakeFromClause<S extends string, Accumulated extends string = ''> =
       ? Trim<Accumulated>
       : Trim<Accumulated extends '' ? S : `${Accumulated} ${S}`>;
 
-type JoinAfterOuter<Tail extends string, Nullable extends boolean> =
-  IsKeyword<FirstWord<Tail>, 'join'> extends true
-    ? { nullable: Nullable; rest: DropFirstWord<Tail> }
-    : IsKeyword<FirstWord<Tail>, 'outer'> extends true
-      ? IsKeyword<FirstWord<DropFirstWord<Tail>>, 'join'> extends true
-        ? { nullable: Nullable; rest: DropFirstWord<DropFirstWord<Tail>> }
-        : never
-      : never;
+type JoinAfterOuter<
+  Tail extends string,
+  Joined extends boolean,
+  Prev extends boolean,
+> = IsKeyword<FirstWord<Tail>, 'join'> extends true
+  ? { joined: Joined; prev: Prev; rest: DropFirstWord<Tail> }
+  : IsKeyword<FirstWord<Tail>, 'outer'> extends true
+    ? IsKeyword<FirstWord<DropFirstWord<Tail>>, 'join'> extends true
+      ? { joined: Joined; prev: Prev; rest: DropFirstWord<DropFirstWord<Tail>> }
+      : never
+    : never;
 
 type JoinPhrase<Head extends string, Tail extends string> =
   IsKeyword<Head, 'join'> extends true
-    ? { nullable: false; rest: Tail }
+    ? { joined: false; prev: false; rest: Tail }
     : IsKeyword<Head, 'inner'> extends true
       ? IsKeyword<FirstWord<Tail>, 'join'> extends true
-        ? { nullable: false; rest: DropFirstWord<Tail> }
+        ? { joined: false; prev: false; rest: DropFirstWord<Tail> }
         : never
       : IsKeyword<Head, 'cross'> extends true
         ? IsKeyword<FirstWord<Tail>, 'join'> extends true
-          ? { nullable: false; rest: DropFirstWord<Tail> }
+          ? { joined: false; prev: false; rest: DropFirstWord<Tail> }
           : never
         : IsKeyword<Head, 'left'> extends true
-          ? JoinAfterOuter<Tail, true>
+          ? JoinAfterOuter<Tail, true, false>
           : IsKeyword<Head, 'right'> extends true
-            ? JoinAfterOuter<Tail, true>
+            ? JoinAfterOuter<Tail, false, true>
             : IsKeyword<Head, 'full'> extends true
-              ? JoinAfterOuter<Tail, true>
+              ? JoinAfterOuter<Tail, true, true>
               : never;
 
 type SplitAtFirstJoin<S extends string, Accumulated extends string = ''> =
@@ -67,10 +77,11 @@ type SplitAtFirstJoin<S extends string, Accumulated extends string = ''> =
       ? [Phrase] extends [never]
         ? SplitAtFirstJoin<Tail, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
         : Phrase extends {
-              nullable: infer Nullable extends boolean;
+              joined: infer Joined extends boolean;
+              prev: infer Prev extends boolean;
               rest: infer Rest extends string;
             }
-          ? { before: Trim<Accumulated>; nullable: Nullable; after: Rest }
+          ? { before: Trim<Accumulated>; joined: Joined; prev: Prev; after: Rest }
           : never
       : never
     : never;
@@ -90,10 +101,24 @@ type AliasOf<Segment extends string, Table extends string> =
           : Next
       : Table;
 
+type CleanIdentifier<Raw extends string> = Unquote<StripQualifier<Raw>>;
+
 type SegmentToSource<Segment extends string, Nullable extends boolean> =
-  FirstWord<Segment> extends infer Table extends string
-    ? { table: Table; alias: AliasOf<Segment, Table>; nullable: Nullable }
+  CleanIdentifier<FirstWord<Segment>> extends infer Table extends string
+    ? {
+        table: Table;
+        alias: Unquote<AliasOf<Segment, Table>>;
+        nullable: Nullable;
+      }
     : never;
+
+type MarkNullable<Sources extends Source[]> = {
+  [Index in keyof Sources]: {
+    table: Sources[Index]['table'];
+    alias: Sources[Index]['alias'];
+    nullable: true;
+  };
+};
 
 type CollectSources<
   S extends string,
@@ -104,10 +129,17 @@ type CollectSources<
     ? [...Accumulated, SegmentToSource<S, Nullable>]
     : Split extends {
           before: infer Before extends string;
-          nullable: infer NextNullable extends boolean;
+          joined: infer Joined extends boolean;
+          prev: infer Prev extends boolean;
           after: infer After extends string;
         }
-      ? CollectSources<After, NextNullable, [...Accumulated, SegmentToSource<Before, Nullable>]>
+      ? Prev extends true
+        ? CollectSources<
+            After,
+            Joined,
+            [...MarkNullable<Accumulated>, SegmentToSource<Before, true>]
+          >
+        : CollectSources<After, Joined, [...Accumulated, SegmentToSource<Before, Nullable>]>
       : [...Accumulated, SegmentToSource<S, Nullable>]
   : never;
 
