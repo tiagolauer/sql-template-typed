@@ -6,13 +6,25 @@ Maintainer notes for developing and releasing `sql-template-typed`.
 
 ```bash
 npm install
-npm run test:types   # tsc --noEmit over src + tests — the type assertions ARE the tests
-npm run build        # emit dist/ with .d.ts
+npm test              # types + runtime
+npm run test:types    # tsc --noEmit over src + tests — type assertions
+npm run test:runtime  # vitest — exercises the client, Result, and error paths
+npm run build         # emit dist/ with .d.ts
 ```
 
-The test suite (`tests/types.test-d.ts`) is pure type assertions: if it
-compiles, the inference is correct. There is no runtime test harness — the
-runtime is a thin passthrough.
+Two layers of tests:
+
+- **Type tests** (`tests/*.test-d.ts`) are pure type assertions — if they
+  compile, the inference is correct. They cover projection/aliases
+  (`types.test-d.ts`), failing-query expectations via `@ts-expect-error`
+  (`negative.test-d.ts`), permissive-inference behavior locks
+  (`inference-edge.test-d.ts`), and deep-recursion stress (`depth.test-d.ts`).
+- **Runtime tests** (`tests/runtime.test.ts`) run under vitest and cover the
+  success path, param forwarding, the empty-query guard, and executor failure.
+
+CI (`.github/workflows/ci.yml`) runs the type tests against a matrix of
+TypeScript versions (5.0, 5.3, 5.6, latest) plus the runtime tests, so a
+template-literal behavior change in a new TypeScript release is caught early.
 
 ## Publishing
 

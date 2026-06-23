@@ -24,8 +24,9 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test:types": "tsc --noEmit -p tsconfig.json",
-    "test": "npm run test:types",
-    "prepublishOnly": "npm run test:types && npm run build"
+    "test:runtime": "vitest run",
+    "test": "npm run test:types && npm run test:runtime",
+    "prepublishOnly": "npm run test && npm run build"
   },
   "peerDependencies": {
     "typescript": ">=5.0.0"
@@ -44,6 +45,7 @@
     "access": "public"
   },
   "devDependencies": {
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
   }
 }
