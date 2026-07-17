@@ -513,25 +513,43 @@ this.**
 | Trailing semicolon | `select id from users;` |
 | Typed parameters | `where id = $1` → `query(sql, id: number)` |
 | Strict mode | `{ strict: true }` → unknown column becomes a `QueryTypeError` |
+| `WHERE` operators | `=`, `<>`, comparisons, `LIKE`/`ILIKE`, `IN (...)`, `BETWEEN ... AND ...`, `IS [NOT] NULL`, `AND`/`OR` |
+| `GROUP BY` / `HAVING` / `ORDER BY` / `LIMIT` / `OFFSET` | parsed and skipped; output shape follows the `SELECT` list, `HAVING`/`LIMIT`/`OFFSET` placeholders are typed |
+| `UNION` / `UNION ALL` | result shape is inferred from the first branch |
+| `CASE WHEN ... THEN ... [ELSE ...] END` | branch types are unioned (`\| null` added when there is no `ELSE`) |
+| Window functions | `row_number() over (partition by ... order by ...)`, `rank()`, `dense_rank()`, etc. |
+| CTEs (`WITH ... AS (...)`) | later CTEs may reference earlier ones; works with strict mode |
+| Derived tables | `from (select ...) x`, including subqueries with their own `WHERE`/`JOIN` |
 
 ## Limitations
 
 This is a focused tool for the common read path, not a full SQL grammar:
 
-- **No subqueries or CTEs yet.** Derived tables (`from (select ...) x`) and
-  `WITH ... AS (...)` are not parsed.
+- **Scalar subqueries are not typed.** A subquery used as a value inside the
+  `SELECT` list or `WHERE` (`select (select count(*) from posts) from users`)
+  resolves to `unknown`. Only `WITH` CTEs and derived tables in `FROM` are
+  parsed.
+- **`CASE` does not support nested `CASE`.** The parser looks for the first
+  top-level `END`; a `CASE` nested inside another `CASE`'s branch is not
+  supported.
+- **Window `OVER (...)` clauses are only used as a boundary**, not parsed for
+  their own typing — `PARTITION BY`/`ORDER BY` content inside `OVER (...)` is
+  discarded, not validated.
 - **Function arguments must not contain spaces.** `count(*)`, `lower(name)`,
   `sum(price)` work; `count(distinct id)` and `concat(a, b)` (space after the
   comma) do not.
 - **Aggregates assume numeric output.** `min`/`max` resolve to `number` even
-  over a text column; unrecognized functions resolve to `unknown`.
+  over a text column; unrecognized functions resolve to `unknown`. `lag`,
+  `lead`, `first_value`, `last_value`, `nth_value` resolve to `unknown` (their
+  real type depends on the argument, which isn't inspected).
 - **`select *` across a join merges columns by name.** When two tables share a
   column name (e.g. both have `id`), the types are intersected rather than kept
   separate. Alias the columns to keep them distinct.
 - **Typed parameters need spaced operators.** `where id = $1` is typed;
-  `where id=$1` is not. `IN (...)` lists and parameters inside `INSERT ...
-  VALUES` are not typed (they fall back to a flexible `unknown[]`). Numbered
-  placeholders are assumed to appear in ascending order (`$1`, `$2`, ...).
+  `where id=$1` is not. Parameters inside `INSERT ... VALUES` are not typed
+  (they fall back to a flexible `unknown[]`), and parameters inside a `WITH`
+  query's own CTE bodies are not typed either. Numbered placeholders are
+  assumed to appear in ascending order (`$1`, `$2`, ...).
 - **Quoted identifiers** use `"..."` (standard) or `[...]` (SQL Server);
   MySQL backticks are not supported. Schema-qualified tables (`public.users`)
   resolve by their final segment (`users`).
@@ -553,10 +571,9 @@ your normal type check. Nothing is generated and nothing is written to disk.
 variable instead of a string literal, or it selects a column/table not in your
 schema. Inline the literal and check the schema.
 
-**How do I handle a `JOIN` today?** Write the SQL as usual and annotate the
-result type yourself with `Query<...>` for the parts that are inferable, or fall
-back to a hand-written row type for that one query. JOIN inference is on the
-roadmap.
+**How do I handle a `JOIN`?** `JOIN` is inferred natively — see
+[section 9](#9-joins). `INNER`/`LEFT`/`RIGHT`/`FULL`/`CROSS` are all
+supported, including nullability of the outer-joined side.
 
 **Why a `Result` instead of throwing?** Database calls are expected to fail
 sometimes; modelling that as a value (rather than an exception) forces callers

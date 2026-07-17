@@ -51,3 +51,19 @@ export type DropFirstWord<S extends string> = S extends `${string} ${infer Rest}
 
 export type IsKeyword<Token extends string, Keyword extends string> =
   Lowercase<Token> extends Lowercase<Keyword> ? true : false;
+
+type ScanParenGroup<
+  S extends string,
+  Depth extends unknown[],
+  Inner extends string,
+> = S extends `${infer Char}${infer Rest}`
+  ? Char extends '('
+    ? ScanParenGroup<Rest, [...Depth, unknown], `${Inner}${Char}`>
+    : Char extends ')'
+      ? Depth extends [unknown, ...infer DepthRest extends unknown[]]
+        ? ScanParenGroup<Rest, DepthRest, `${Inner}${Char}`>
+        : { inner: Inner; rest: Rest }
+      : ScanParenGroup<Rest, Depth, `${Inner}${Char}`>
+  : { inner: Inner; rest: '' };
+
+export type ExtractParenGroup<S extends string> = ScanParenGroup<S, [], ''>;

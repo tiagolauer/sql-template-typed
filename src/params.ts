@@ -8,11 +8,37 @@ import type {
 
 type Operator = '=' | '<>' | '!=' | '<' | '>' | '<=' | '>=';
 
-type IsOperator<Token extends string> = Token extends Operator ? true : false;
+type WordOperator = 'like' | 'ilike' | 'in' | 'between';
 
-type IsPlaceholder<Token extends string> = Token extends '?'
+type ForcedNumberKeyword = 'limit' | 'offset';
+
+type IsOperator<Token extends string> = Token extends Operator
   ? true
-  : Token extends `$${string}`
+  : Lowercase<Token> extends WordOperator
+    ? true
+    : false;
+
+type IsTransparentToken<Token extends string> = Token extends '(' | ')' | ','
+  ? true
+  : Lowercase<Token> extends 'and' | 'or' | 'not'
+    ? true
+    : false;
+
+type StripLeadingParens<S extends string> = S extends `(${infer Rest}`
+  ? StripLeadingParens<Rest>
+  : S;
+
+type StripTrailingListPunctuation<S extends string> = S extends `${infer Rest})`
+  ? StripTrailingListPunctuation<Rest>
+  : S extends `${infer Rest},`
+    ? StripTrailingListPunctuation<Rest>
+    : S;
+
+type CleanPlaceholderToken<S extends string> = StripTrailingListPunctuation<StripLeadingParens<S>>;
+
+type IsPlaceholder<Token extends string> = CleanPlaceholderToken<Token> extends '?'
+  ? true
+  : CleanPlaceholderToken<Token> extends `$${string}`
     ? true
     : false;
 
@@ -21,7 +47,11 @@ type ParamType<
   Sources extends Source[],
   Column extends string,
   Op extends string,
-> = IsOperator<Op> extends true ? ResolveColumnLoose<DB, Sources, Column> : unknown;
+> = Lowercase<Op> extends ForcedNumberKeyword
+  ? number
+  : IsOperator<Op> extends true
+    ? ResolveColumnLoose<DB, Sources, Column>
+    : unknown;
 
 type ScanParams<
   S extends string,
@@ -32,8 +62,17 @@ type ScanParams<
   Accumulated extends unknown[] = [],
 > = S extends `${infer Head} ${infer Tail}`
   ? IsPlaceholder<Head> extends true
-    ? ScanParams<Tail, DB, Sources, '', '', [...Accumulated, ParamType<DB, Sources, PrevPrev, Prev>]>
-    : ScanParams<Tail, DB, Sources, Prev, Head, Accumulated>
+    ? ScanParams<
+        Tail,
+        DB,
+        Sources,
+        PrevPrev,
+        Prev,
+        [...Accumulated, ParamType<DB, Sources, PrevPrev, Prev>]
+      >
+    : IsTransparentToken<Head> extends true
+      ? ScanParams<Tail, DB, Sources, PrevPrev, Prev, Accumulated>
+      : ScanParams<Tail, DB, Sources, Prev, Head, Accumulated>
   : S extends ''
     ? Accumulated
     : IsPlaceholder<S> extends true

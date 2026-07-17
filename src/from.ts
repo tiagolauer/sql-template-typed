@@ -5,12 +5,14 @@ import type {
   IsKeyword,
   Unquote,
   StripQualifier,
+  ExtractParenGroup,
 } from './string.js';
 
 export interface Source {
   table: string;
   alias: string;
   nullable: boolean;
+  derivedQuery?: string;
 }
 
 type ClauseBoundary =
@@ -31,14 +33,40 @@ type IsBoundary<Word extends string> = Lowercase<Word> extends ClauseBoundary
   ? true
   : false;
 
-type TakeFromClause<S extends string, Accumulated extends string = ''> =
-  S extends `${infer Head} ${infer Tail}`
+type OpenCount<S extends string, Accumulated extends unknown[] = []> = S extends `${string}(${infer After}`
+  ? OpenCount<After, [...Accumulated, unknown]>
+  : Accumulated;
+
+type CloseCount<S extends string, Accumulated extends unknown[] = []> = S extends `${string})${infer After}`
+  ? CloseCount<After, [...Accumulated, unknown]>
+  : Accumulated;
+
+type PopN<Depth extends unknown[], N extends unknown[]> = N extends [unknown, ...infer NRest]
+  ? Depth extends [unknown, ...infer DepthRest]
+    ? PopN<DepthRest, NRest>
+    : Depth
+  : Depth;
+
+type ApplyParenDelta<Depth extends unknown[], Token extends string> = PopN<
+  [...Depth, ...OpenCount<Token>],
+  CloseCount<Token>
+>;
+
+type TakeFromClause<
+  S extends string,
+  Depth extends unknown[] = [],
+  Accumulated extends string = '',
+> = S extends `${infer Head} ${infer Tail}`
+  ? Depth extends []
     ? IsBoundary<Head> extends true
       ? Trim<Accumulated>
-      : TakeFromClause<Tail, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
-    : IsBoundary<S> extends true
+      : TakeFromClause<Tail, ApplyParenDelta<Depth, Head>, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
+    : TakeFromClause<Tail, ApplyParenDelta<Depth, Head>, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
+  : Depth extends []
+    ? IsBoundary<S> extends true
       ? Trim<Accumulated>
-      : Trim<Accumulated extends '' ? S : `${Accumulated} ${S}`>;
+      : Trim<Accumulated extends '' ? S : `${Accumulated} ${S}`>
+    : Trim<Accumulated extends '' ? S : `${Accumulated} ${S}`>;
 
 type JoinAfterOuter<
   Tail extends string,
@@ -71,11 +99,15 @@ type JoinPhrase<Head extends string, Tail extends string> =
               ? JoinAfterOuter<Tail, true, true>
               : never;
 
-type SplitAtFirstJoin<S extends string, Accumulated extends string = ''> =
-  S extends `${infer Head} ${infer Tail}`
+type SplitAtFirstJoin<
+  S extends string,
+  Depth extends unknown[] = [],
+  Accumulated extends string = '',
+> = S extends `${infer Head} ${infer Tail}`
+  ? Depth extends []
     ? JoinPhrase<Head, Tail> extends infer Phrase
       ? [Phrase] extends [never]
-        ? SplitAtFirstJoin<Tail, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
+        ? SplitAtFirstJoin<Tail, ApplyParenDelta<Depth, Head>, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
         : Phrase extends {
               joined: infer Joined extends boolean;
               prev: infer Prev extends boolean;
@@ -84,7 +116,8 @@ type SplitAtFirstJoin<S extends string, Accumulated extends string = ''> =
           ? { before: Trim<Accumulated>; joined: Joined; prev: Prev; after: Rest }
           : never
       : never
-    : never;
+    : SplitAtFirstJoin<Tail, ApplyParenDelta<Depth, Head>, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
+  : never;
 
 type AliasOf<Segment extends string, Table extends string> =
   DropFirstWord<Segment> extends ''
@@ -103,8 +136,30 @@ type AliasOf<Segment extends string, Table extends string> =
 
 type CleanIdentifier<Raw extends string> = Unquote<StripQualifier<Raw>>;
 
-type SegmentToSource<Segment extends string, Nullable extends boolean> =
-  CleanIdentifier<FirstWord<Segment>> extends infer Table extends string
+type DerivedAlias<Rest extends string> = Trim<Rest> extends ''
+  ? never
+  : IsKeyword<FirstWord<Trim<Rest>>, 'as'> extends true
+    ? FirstWord<DropFirstWord<Trim<Rest>>>
+    : IsKeyword<FirstWord<Trim<Rest>>, 'on'> extends true
+      ? never
+      : FirstWord<Trim<Rest>>;
+
+type DerivedSegmentToSource<Segment extends string, Nullable extends boolean> = Trim<Segment> extends `(${infer AfterOpen}`
+  ? ExtractParenGroup<AfterOpen> extends { inner: infer SubQuery extends string; rest: infer Rest extends string }
+    ? [DerivedAlias<Rest>] extends [never]
+      ? never
+      : {
+          table: DerivedAlias<Rest>;
+          alias: DerivedAlias<Rest>;
+          nullable: Nullable;
+          derivedQuery: Trim<SubQuery>;
+        }
+    : never
+  : never;
+
+type SegmentToSource<Segment extends string, Nullable extends boolean> = Trim<Segment> extends `(${string}`
+  ? DerivedSegmentToSource<Segment, Nullable>
+  : CleanIdentifier<FirstWord<Segment>> extends infer Table extends string
     ? {
         table: Table;
         alias: Unquote<AliasOf<Segment, Table>>;
@@ -113,11 +168,9 @@ type SegmentToSource<Segment extends string, Nullable extends boolean> =
     : never;
 
 type MarkNullable<Sources extends Source[]> = {
-  [Index in keyof Sources]: {
-    table: Sources[Index]['table'];
-    alias: Sources[Index]['alias'];
-    nullable: true;
-  };
+  [Index in keyof Sources]: Sources[Index] extends { derivedQuery: infer Q extends string }
+    ? { table: Sources[Index]['table']; alias: Sources[Index]['alias']; nullable: true; derivedQuery: Q }
+    : { table: Sources[Index]['table']; alias: Sources[Index]['alias']; nullable: true };
 };
 
 type CollectSources<

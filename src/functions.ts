@@ -20,6 +20,17 @@ export interface FunctionReturnTypes {
   rtrim: string;
   concat: string;
   coalesce: unknown;
+  row_number: number;
+  rank: number;
+  dense_rank: number;
+  ntile: number;
+  percent_rank: number;
+  cume_dist: number;
+  lag: unknown;
+  lead: unknown;
+  first_value: unknown;
+  last_value: unknown;
+  nth_value: unknown;
 }
 
 export type IsFunctionCall<Expr extends string> = Expr extends `${string}(${string})`

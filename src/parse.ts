@@ -2,10 +2,12 @@ import type {
   Normalize,
   Trim,
   FirstWord,
+  DropFirstWord,
   StripQualifier,
   Qualifier,
   IsKeyword,
   Unquote,
+  ExtractParenGroup,
 } from './string.js';
 import type {
   IsFunctionCall,
@@ -13,6 +15,8 @@ import type {
   FunctionReturnType,
 } from './functions.js';
 import type { Source, ParseFromClause } from './from.js';
+import type { IsCaseExpression, SplitCaseExpression, CaseExpressionType } from './case.js';
+import type { ParseWithClause, BuildCteMap } from './cte.js';
 
 export type Schema = Record<string, Record<string, unknown>>;
 
@@ -103,14 +107,53 @@ type OutputName<Expression extends string> = IsFunctionCall<Expression> extends 
   ? FunctionOutputName<Expression>
   : Unquote<StripQualifier<Expression>>;
 
-type ParseColumnEntry<Entry extends string> =
-  Entry extends `${infer Expression} ${infer Middle} ${infer Alias}`
-    ? IsKeyword<Middle, 'as'> extends true
-      ? [Unquote<Trim<Alias>>, Trim<Expression>]
-      : [OutputName<Entry>, Entry]
-    : Entry extends `${infer Expression} ${infer Alias}`
-      ? [Unquote<Trim<Alias>>, Trim<Expression>]
-      : [OutputName<Trim<Entry>>, Trim<Entry>];
+type FindOverKeyword<S extends string, Accumulated extends string = ''> =
+  S extends `${infer Head} ${infer Tail}`
+    ? IsKeyword<Head, 'over'> extends true
+      ? IsFunctionCall<Trim<Accumulated>> extends true
+        ? { expr: Trim<Accumulated>; rest: Tail }
+        : FindOverKeyword<Tail, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
+      : FindOverKeyword<Tail, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
+    : never;
+
+type StripLeadingOpenParen<S extends string> = Trim<S> extends `(${infer Rest}` ? Rest : never;
+
+type SplitWindowExpression<Entry extends string> = FindOverKeyword<Entry> extends {
+  expr: infer Expr extends string;
+  rest: infer Rest extends string;
+}
+  ? StripLeadingOpenParen<Rest> extends infer AfterOpen extends string
+    ? [AfterOpen] extends [never]
+      ? never
+      : ExtractParenGroup<AfterOpen> extends { rest: infer AfterClose extends string }
+        ? { expr: Expr; after: Trim<AfterClose> }
+        : never
+    : never
+  : never;
+
+type IsWindowExpression<Entry extends string> = [SplitWindowExpression<Entry>] extends [never]
+  ? false
+  : true;
+
+type ParseColumnEntry<Entry extends string> = IsCaseExpression<Entry> extends true
+  ? SplitCaseExpression<Entry> extends { body: infer Body extends string; alias: infer Alias extends string }
+    ? [Alias, `case ${Body} end`]
+    : [OutputName<Trim<Entry>>, Trim<Entry>]
+  : IsWindowExpression<Entry> extends true
+    ? SplitWindowExpression<Entry> extends { expr: infer Expr extends string; after: infer After extends string }
+      ? After extends ''
+        ? [OutputName<Expr>, Expr]
+        : IsKeyword<FirstWord<After>, 'as'> extends true
+          ? [Unquote<Trim<DropFirstWord<After>>>, Expr]
+          : [Unquote<Trim<After>>, Expr]
+      : [OutputName<Trim<Entry>>, Trim<Entry>]
+    : Entry extends `${infer Expression} ${infer Middle} ${infer Alias}`
+      ? IsKeyword<Middle, 'as'> extends true
+        ? [Unquote<Trim<Alias>>, Trim<Expression>]
+        : [OutputName<Entry>, Entry]
+      : Entry extends `${infer Expression} ${infer Alias}`
+        ? [Unquote<Trim<Alias>>, Trim<Expression>]
+        : [OutputName<Trim<Entry>>, Trim<Entry>];
 
 type ParseColumnEntries<Columns extends string[]> = {
   [Index in keyof Columns]: ParseColumnEntry<Columns[Index]>;
@@ -209,22 +252,26 @@ type QualifiedColumnType<
       : never
   : never;
 
-type ResolveColumnType<
+export type ResolveColumnType<
   DB extends SchemaLike,
   Sources extends Source[],
   Expression extends string,
   Strict extends boolean,
-> = IsFunctionCall<Expression> extends true
-  ? FunctionReturnType<Expression>
-  : Qualifier<Expression> extends ''
-    ? BareColumnType<DB, Sources, Unquote<StripQualifier<Expression>>, Strict>
-    : QualifiedColumnType<
-        DB,
-        Sources,
-        Unquote<Qualifier<Expression>>,
-        Unquote<StripQualifier<Expression>>,
-        Strict
-      >;
+> = IsCaseExpression<Expression> extends true
+  ? SplitCaseExpression<Expression> extends { body: infer Body extends string }
+    ? CaseExpressionType<DB, Sources, Body, Strict>
+    : unknown
+  : IsFunctionCall<Expression> extends true
+    ? FunctionReturnType<Expression>
+    : Qualifier<Expression> extends ''
+      ? BareColumnType<DB, Sources, Unquote<StripQualifier<Expression>>, Strict>
+      : QualifiedColumnType<
+          DB,
+          Sources,
+          Unquote<Qualifier<Expression>>,
+          Unquote<StripQualifier<Expression>>,
+          Strict
+        >;
 
 export type ResolveColumnLoose<
   DB extends SchemaLike,
@@ -251,7 +298,7 @@ type MergedStarColumns<DB extends SchemaLike, Sources extends Source[]> = Source
   ? MergeSourceColumns<DB, Head> & MergedStarColumns<DB, Tail>
   : unknown;
 
-type Flatten<T> = { [Key in keyof T]: T[Key] };
+export type Flatten<T> = { [Key in keyof T]: T[Key] };
 
 type AllKnownTables<DB extends SchemaLike, Sources extends Source[]> = Sources extends [
   infer Head extends Source,
@@ -319,26 +366,62 @@ type IsSelectAll<Columns extends string> = Trim<Columns> extends '*' ? true : fa
 
 type EmptyRow = Record<string, never>;
 
-type InferRowWith<
+type ResolveCteContext<
   DB extends SchemaLike,
   Q extends string,
   Strict extends boolean,
-> = ParseStatement<Q> extends {
-  columns: infer Columns extends string;
-  sources: infer Sources extends Source[];
+> = [ParseWithClause<Normalize<Q>>] extends [never]
+  ? { db: DB; query: Normalize<Q> }
+  : ParseWithClause<Normalize<Q>> extends {
+        ctes: infer Ctes extends [string, string][];
+        rest: infer Rest extends string;
+      }
+    ? { db: DB & BuildCteMap<DB, Ctes, Strict>; query: Rest }
+    : { db: DB; query: Normalize<Q> };
+
+type BuildDerivedSourceMap<
+  DB extends SchemaLike,
+  Sources extends Source[],
+  Strict extends boolean,
+  Accumulated extends Record<string, unknown> = Record<never, never>,
+> = Sources extends [infer Head extends Source, ...infer Tail extends Source[]]
+  ? Head extends { derivedQuery: infer Q extends string }
+    ? BuildDerivedSourceMap<
+        DB,
+        Tail,
+        Strict,
+        Accumulated & { [Key in Head['alias']]: Flatten<InferRowWith<DB, Q, Strict>> }
+      >
+    : BuildDerivedSourceMap<DB, Tail, Strict, Accumulated>
+  : Accumulated;
+
+export type InferRowWith<
+  DB extends SchemaLike,
+  Q extends string,
+  Strict extends boolean,
+> = ResolveCteContext<DB, Q, Strict> extends {
+  db: infer CteDB extends SchemaLike;
+  query: infer EffectiveQuery extends string;
 }
-  ? Trim<Columns> extends ''
-    ? EmptyRow
-    : IsSelectAll<Columns> extends true
-      ? StarRow<DB, Sources, Strict>
-      : BuildSelection<
-          DB,
-          Sources,
-          ParseColumnEntries<SplitColumnList<Columns>> extends [string, string][]
-            ? ParseColumnEntries<SplitColumnList<Columns>>
-            : [],
-          Strict
-        >
+  ? ParseStatementNormalized<EffectiveQuery> extends {
+      columns: infer Columns extends string;
+      sources: infer Sources extends Source[];
+    }
+    ? (CteDB & BuildDerivedSourceMap<CteDB, Sources, Strict>) extends infer EffectiveDB extends SchemaLike
+      ? Trim<Columns> extends ''
+        ? EmptyRow
+        : IsSelectAll<Columns> extends true
+          ? StarRow<EffectiveDB, Sources, Strict>
+          : BuildSelection<
+              EffectiveDB,
+              Sources,
+              ParseColumnEntries<SplitColumnList<Columns>> extends [string, string][]
+                ? ParseColumnEntries<SplitColumnList<Columns>>
+                : [],
+              Strict
+            >
+      : never
+    : never
   : never;
 
 export type InferRow<DB extends SchemaLike, Q extends string> = InferRowWith<DB, Q, false>;
