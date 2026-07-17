@@ -33,7 +33,9 @@ export type Unquote<S extends string> = S extends `"${infer Inner}"`
   ? Inner
   : S extends `[${infer Inner}]`
     ? Inner
-    : S;
+    : S extends `\`${infer Inner}\``
+      ? Inner
+      : S;
 
 export type FirstWord<S extends string> = S extends `${infer Head} ${string}`
   ? Head

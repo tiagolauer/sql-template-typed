@@ -34,6 +34,20 @@ type StatementAfterSelect<S extends string> = S extends `${infer Keyword} ${infe
     : never
   : never;
 
+type StripTopCount<S extends string> = Trim<S> extends `(${infer AfterOpen}`
+  ? ExtractParenGroup<AfterOpen> extends { rest: infer Rest extends string }
+    ? Trim<Rest>
+    : Trim<S>
+  : DropFirstWord<Trim<S>>;
+
+type StripTopClause<S extends string> = IsKeyword<FirstWord<Trim<S>>, 'top'> extends true
+  ? StripTopCount<DropFirstWord<Trim<S>>> extends infer AfterCount extends string
+    ? IsKeyword<FirstWord<AfterCount>, 'percent'> extends true
+      ? Trim<DropFirstWord<AfterCount>>
+      : AfterCount
+    : S
+  : S;
+
 type ColumnsBeforeFrom<
   S extends string,
   Accumulated extends string = '',
@@ -65,6 +79,41 @@ type ReturningColumns<S extends string> = AfterKeyword<S, 'returning'> extends i
     : ''
   : '';
 
+type AccumulateUntil<
+  S extends string,
+  StopKeyword extends string,
+  Accumulated extends string = '',
+> = S extends `${infer Head} ${infer Tail}`
+  ? IsKeyword<Head, StopKeyword> extends true
+    ? Trim<Accumulated>
+    : AccumulateUntil<Tail, StopKeyword, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
+  : IsKeyword<S, StopKeyword> extends true
+    ? Trim<Accumulated>
+    : Trim<Accumulated extends '' ? S : `${Accumulated} ${S}`>;
+
+type OutputClauseColumns<S extends string, StopKeyword extends string> = AfterKeyword<
+  S,
+  'output'
+> extends infer Rest
+  ? Rest extends string
+    ? AccumulateUntil<Rest, StopKeyword>
+    : ''
+  : '';
+
+type StripPseudoTableEntry<Entry extends string> = Lowercase<
+  Qualifier<Trim<Entry>>
+> extends 'inserted' | 'deleted'
+  ? StripQualifier<Trim<Entry>>
+  : Entry;
+
+type StripPseudoTableQualifiers<S extends string> = S extends `${infer Head},${infer Tail}`
+  ? `${StripPseudoTableEntry<Head>},${StripPseudoTableQualifiers<Tail>}`
+  : StripPseudoTableEntry<S>;
+
+type ReturningOrOutputColumns<S extends string, StopKeyword extends string> = ReturningColumns<S> extends ''
+  ? StripPseudoTableQualifiers<OutputClauseColumns<S, StopKeyword>>
+  : ReturningColumns<S>;
+
 type SingleSource<Table extends string> = [{ table: Table; alias: Table; nullable: false }];
 
 export interface ParsedStatement {
@@ -74,7 +123,7 @@ export interface ParsedStatement {
 
 type ParseSelectBody<S extends string> = StatementAfterSelect<S> extends infer Body
   ? Body extends string
-    ? ColumnsBeforeFrom<Body> extends {
+    ? ColumnsBeforeFrom<StripTopClause<Body>> extends {
         columns: infer Columns extends string;
         afterFrom: infer AfterFrom extends string;
       }
@@ -87,11 +136,11 @@ type ParseStatementNormalized<S extends string> = FirstWord<S> extends infer Key
   ? IsKeyword<Keyword, 'select'> extends true
     ? ParseSelectBody<S>
     : IsKeyword<Keyword, 'insert'> extends true
-      ? { columns: ReturningColumns<S>; sources: SingleSource<WordAfterKeyword<S, 'into'>> }
+      ? { columns: ReturningOrOutputColumns<S, 'values'>; sources: SingleSource<WordAfterKeyword<S, 'into'>> }
       : IsKeyword<Keyword, 'update'> extends true
-        ? { columns: ReturningColumns<S>; sources: SingleSource<WordAfterKeyword<S, 'update'>> }
+        ? { columns: ReturningOrOutputColumns<S, 'where'>; sources: SingleSource<WordAfterKeyword<S, 'update'>> }
         : IsKeyword<Keyword, 'delete'> extends true
-          ? { columns: ReturningColumns<S>; sources: SingleSource<WordAfterKeyword<S, 'from'>> }
+          ? { columns: ReturningOrOutputColumns<S, 'where'>; sources: SingleSource<WordAfterKeyword<S, 'from'>> }
           : never
   : never;
 

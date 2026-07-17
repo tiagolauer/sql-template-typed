@@ -36,6 +36,7 @@ if (result.status === ResultStatus.Ok) {
   - [9. Joins](#9-joins)
   - [10. Typed parameters](#10-typed-parameters)
 - [Driver recipes](#driver-recipes)
+- [Database support](#database-support)
 - [API reference](#api-reference)
 - [Supported SQL subset](#supported-sql-subset)
 - [Limitations](#limitations)
@@ -452,6 +453,45 @@ const db = createTypedDb<DB>(async (text, params) => {
 });
 ```
 
+**mssql (SQL Server)**
+
+```ts
+import sql from 'mssql';
+const pool = await sql.connect({ /* ... */ });
+const db = createTypedDb<DB>(async (query, params) => {
+  const request = pool.request();
+  params.forEach((value, index) => request.input(`p${index + 1}`, value));
+  const result = await request.query(query);
+  return result.recordset;
+});
+```
+
+`mssql` binds named parameters (`request.input('name', value)`), so build the
+query with matching `@pN` placeholders — `Params<DB, Q>` still gives you a
+positional tuple typed against the query's `@` placeholders, in the order they
+appear.
+
+## Database support
+
+The parser accepts the SQL used by each of the four major engines, without any
+per-dialect configuration — it stays permissive and recognizes each dialect's
+syntax by shape, not by a declared "mode".
+
+| Feature | PostgreSQL | MySQL | SQLite | SQL Server |
+| ------- | ---------- | ----- | ------ | ---------- |
+| Placeholders | `$1`, `$2`, ... | `?` | `?` | `@name`, `@p1` |
+| Quoted identifiers | `"col"` | `` `col` `` | `"col"` | `[col]`, `"col"` |
+| Row-returning writes | `RETURNING col` | *(not supported by the engine — `INSERT`/`UPDATE`/`DELETE` type as `Record<string, never>[]`)* | `RETURNING col` | `OUTPUT inserted.col` / `OUTPUT deleted.col` |
+| Pagination | `LIMIT n OFFSET m` | `LIMIT n OFFSET m` | `LIMIT n OFFSET m` | `TOP n`, `TOP (n) PERCENT`, or `OFFSET ... FETCH NEXT n ROWS ONLY` |
+| `ILIKE` | ✓ | — | — | — |
+| Joins, CTEs, `CASE`, window functions, subqueries in `FROM` | ✓ | ✓ | ✓ | ✓ (dialect-agnostic — see [Supported SQL subset](#supported-sql-subset)) |
+
+See [`tests/dialect-postgres.test-d.ts`](tests/dialect-postgres.test-d.ts),
+[`tests/dialect-mysql.test-d.ts`](tests/dialect-mysql.test-d.ts),
+[`tests/dialect-sqlite.test-d.ts`](tests/dialect-sqlite.test-d.ts), and
+[`tests/dialect-mssql.test-d.ts`](tests/dialect-mssql.test-d.ts) for the exact
+query shapes each engine is tested against.
+
 ## API reference
 
 | Export | Kind | Description |
@@ -520,6 +560,10 @@ this.**
 | Window functions | `row_number() over (partition by ... order by ...)`, `rank()`, `dense_rank()`, etc. |
 | CTEs (`WITH ... AS (...)`) | later CTEs may reference earlier ones; works with strict mode |
 | Derived tables | `from (select ...) x`, including subqueries with their own `WHERE`/`JOIN` |
+| Named parameters | `where id = @id` (SQL Server style) |
+| Backtick identifiers | `` select `id` from `users` `` (MySQL style) |
+| `TOP` clause | `select top 10 id from users`, `top (n)`, `top n percent` (SQL Server) |
+| `OUTPUT` clause | `insert ... output inserted.id values (...)` (SQL Server) |
 
 ## Limitations
 
@@ -550,9 +594,14 @@ This is a focused tool for the common read path, not a full SQL grammar:
   (they fall back to a flexible `unknown[]`), and parameters inside a `WITH`
   query's own CTE bodies are not typed either. Numbered placeholders are
   assumed to appear in ascending order (`$1`, `$2`, ...).
-- **Quoted identifiers** use `"..."` (standard) or `[...]` (SQL Server);
-  MySQL backticks are not supported. Schema-qualified tables (`public.users`)
-  resolve by their final segment (`users`).
+- **Quoted identifiers** use `"..."` (standard), `[...]` (SQL Server), or
+  `` `...` `` (MySQL — escape the backtick with `\`` inside the template
+  literal). Schema-qualified tables (`public.users`) resolve by their final
+  segment (`users`).
+- **`TOP` supports a plain count or `TOP N PERCENT`** — `TOP N WITH TIES` is
+  not parsed. `OUTPUT` only recognizes the `inserted`/`deleted` pseudo-table
+  prefixes (they resolve against the statement's single table); `OUTPUT ...
+  INTO @table` is not supported.
 - **Unknown columns, tables, or aliases resolve to `unknown`** by default — pass
   `{ strict: true }` to turn them into a `QueryTypeError` instead.
 

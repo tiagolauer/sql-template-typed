@@ -40,7 +40,9 @@ type IsPlaceholder<Token extends string> = CleanPlaceholderToken<Token> extends 
   ? true
   : CleanPlaceholderToken<Token> extends `$${string}`
     ? true
-    : false;
+    : CleanPlaceholderToken<Token> extends `@${string}`
+      ? true
+      : false;
 
 type ParamType<
   DB extends SchemaLike,
