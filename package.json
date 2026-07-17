@@ -1,6 +1,6 @@
 {
   "name": "sql-template-typed",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Parse SQL in TypeScript template literal types and infer the result shape from your schema — no codegen, no ORM.",
   "type": "module",
   "sideEffects": false,
