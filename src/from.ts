@@ -6,6 +6,7 @@ import type {
   Unquote,
   StripQualifier,
   ExtractParenGroup,
+  ApplyParenDelta,
 } from './string.js';
 
 export interface Source {
@@ -32,25 +33,6 @@ type ClauseBoundary =
 type IsBoundary<Word extends string> = Lowercase<Word> extends ClauseBoundary
   ? true
   : false;
-
-type OpenCount<S extends string, Accumulated extends unknown[] = []> = S extends `${string}(${infer After}`
-  ? OpenCount<After, [...Accumulated, unknown]>
-  : Accumulated;
-
-type CloseCount<S extends string, Accumulated extends unknown[] = []> = S extends `${string})${infer After}`
-  ? CloseCount<After, [...Accumulated, unknown]>
-  : Accumulated;
-
-type PopN<Depth extends unknown[], N extends unknown[]> = N extends [unknown, ...infer NRest]
-  ? Depth extends [unknown, ...infer DepthRest]
-    ? PopN<DepthRest, NRest>
-    : Depth
-  : Depth;
-
-type ApplyParenDelta<Depth extends unknown[], Token extends string> = PopN<
-  [...Depth, ...OpenCount<Token>],
-  CloseCount<Token>
->;
 
 type TakeFromClause<
   S extends string,
