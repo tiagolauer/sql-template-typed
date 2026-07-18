@@ -24,6 +24,11 @@ describe('mapPostgresType', () => {
     expect(mapPostgresType('bytea')).toBe('Buffer');
   });
 
+  it('maps time-only values to strings to match pg defaults', () => {
+    expect(mapPostgresType('time')).toBe('string');
+    expect(mapPostgresType('timetz')).toBe('string');
+  });
+
   it('maps array udt names (leading underscore) to T[]', () => {
     expect(mapPostgresType('_int4')).toBe('number[]');
     expect(mapPostgresType('_text')).toBe('string[]');

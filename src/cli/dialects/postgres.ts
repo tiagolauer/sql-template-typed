@@ -23,8 +23,8 @@ const POSTGRES_SCALAR_TYPES: Record<string, string> = {
   timestamp: 'Date',
   timestamptz: 'Date',
   date: 'Date',
-  time: 'Date',
-  timetz: 'Date',
+  time: 'string',
+  timetz: 'string',
 };
 
 export function mapPostgresType(udtName: string): string {
