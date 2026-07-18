@@ -42,6 +42,13 @@ first-timer-sized, but open if you want to dig in:
   as known gaps in [README limitations](README.md#limitations).
 - **Nested `CASE`** — the parser currently finds the first top-level `END`
   only.
+- **`ts-plugin` on TypeScript 7+** — TS 7's native (Go) compiler dropped the
+  classic JS Compiler API entirely (no `ts.Node`/`ts.forEachChild`/
+  `ts.createProgram` in the package anymore, replaced by a still-`unstable/`-
+  prefixed AST API). This isn't unique to this project — it breaks every
+  tsserver plugin built the classic way. Blocked on either TypeScript
+  shipping a compatibility layer or the new API stabilizing enough to port
+  to; not worth chasing while it's explicitly marked unstable upstream.
 
 ## Good first issues
 

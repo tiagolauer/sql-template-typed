@@ -632,6 +632,12 @@ covers the example above before you've typed `FROM` at all.
   (`$1`/`?`/`@name`), never JS template interpolation.
 - Completions after `WHERE`/`ORDER BY`/etc. aren't offered yet — only the
   `SELECT` column list.
+- **Requires TypeScript < 7.** TypeScript 7's native (Go-based) compiler
+  removed the classic JS Compiler API (`ts.Node`, `ts.forEachChild`,
+  `ts.createProgram`, ...) that this plugin — and, as of this writing, every
+  TypeScript language service plugin in the ecosystem — is built on. There is
+  no compatibility shim yet. The plugin works on TypeScript 5.x/6.x; on 7.x
+  it currently fails to load rather than silently doing nothing.
 
 ## API reference
 
