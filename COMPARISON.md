@@ -1,4 +1,4 @@
-# Comparison: sql-template-typed vs Prisma, Kysely, pgTyped, Zapatos
+# Comparison: OwlSQL vs Prisma, Kysely, pgTyped, Zapatos
 
 This is **not** a runtime-speed benchmark — query execution speed is
 dominated by your database and driver, not the layer on top of it, and
@@ -23,7 +23,7 @@ check the source link and open an issue.
 
 ## At a glance
 
-| | sql-template-typed | Prisma | Kysely | pgTyped | Zapatos |
+| | OwlSQL | Prisma | Kysely | pgTyped | Zapatos |
 | --- | --- | --- | --- | --- | --- |
 | Approach | Type-level SQL parser | Schema DSL → generated ORM client | TypeScript query builder | SQL files/tags → generated wrapper functions | Generated schema + typed SQL helpers |
 | You write | Raw SQL strings | Prisma's own query API | Builder method chains | Raw SQL (in `.sql` files or tags) | Builder-ish helpers or raw SQL via `db.sql` |
@@ -118,7 +118,7 @@ check the source link and open an issue.
   difference is Zapatos also gives you typed query helpers on top, where
   this library stops at typing whatever SQL you hand it directly.
 
-## sql-template-typed
+## OwlSQL
 
 - **Build step**: none, ever, for queries — `Query<DB, 'select ...'>` is
   resolved by the same `tsc`/tsserver pass that already type-checks the rest

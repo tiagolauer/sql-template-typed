@@ -22,7 +22,7 @@ describe('detectDialect', () => {
 
 describe('runGenerate (end to end against a real sqlite file)', () => {
   it('introspects the database and writes the rendered schema to --out', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'sql-template-typed-'));
+    const dir = mkdtempSync(join(tmpdir(), 'owlsql-'));
     const dbFile = join(dir, 'app.db');
     const outFile = join(dir, 'schema.ts');
 
@@ -49,7 +49,7 @@ describe('runGenerate (end to end against a real sqlite file)', () => {
   });
 
   it('throws a clear error when no tables are found', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'sql-template-typed-'));
+    const dir = mkdtempSync(join(tmpdir(), 'owlsql-'));
     const dbFile = join(dir, 'empty.db');
 
     try {

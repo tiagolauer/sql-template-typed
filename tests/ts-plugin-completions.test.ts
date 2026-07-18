@@ -24,7 +24,7 @@ db.query(\`select id, na from posts\`);
 `;
 
 function buildProgram(source: string): { program: ts.Program; sourceFile: ts.SourceFile; filePath: string; dir: string } {
-  const dir = mkdtempSync(join(tmpdir(), 'sql-template-typed-ts-plugin-'));
+  const dir = mkdtempSync(join(tmpdir(), 'owlsql-ts-plugin-'));
   const filePath = join(dir, 'fixture.ts');
   writeFileSync(filePath, source, 'utf8');
 

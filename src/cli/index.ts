@@ -43,7 +43,7 @@ async function main(): Promise<void> {
 
   if (command !== 'generate') {
     process.stderr.write(
-      'Usage: sql-template-typed generate --url <connection-string> [--out ./schema.ts] [--dialect postgres|mysql|sqlite|mssql] [--schema <name>]\n',
+      'Usage: owlsql generate --url <connection-string> [--out ./schema.ts] [--dialect postgres|mysql|sqlite|mssql] [--schema <name>]\n',
     );
     process.exitCode = command === undefined ? 0 : 1;
     return;

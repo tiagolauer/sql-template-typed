@@ -1,6 +1,6 @@
 # Contributing
 
-Maintainer notes for developing and releasing `sql-template-typed`.
+Maintainer notes for developing and releasing `@owlsql/core` (OwlSQL).
 
 ## Development
 
@@ -37,5 +37,5 @@ npm publish            # runs test:types, then build, then publishes dist/
 ```
 
 Before the first registry publish, the package is still usable via a local path
-(`npm i file:../sql-template-typed`), a tarball (`npm pack`), a workspace
+(`npm i file:../owlsql`), a tarball (`npm pack`), a workspace
 protocol, or a git URL.

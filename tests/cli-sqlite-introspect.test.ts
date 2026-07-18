@@ -6,7 +6,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { introspectSqlite } from '../src/cli/dialects/sqlite';
 
 function withTempDatabase(setup: (db: DatabaseSync) => void): string {
-  const dir = mkdtempSync(join(tmpdir(), 'sql-template-typed-'));
+  const dir = mkdtempSync(join(tmpdir(), 'owlsql-'));
   const file = join(dir, 'test.db');
   const db = new DatabaseSync(file);
   setup(db);

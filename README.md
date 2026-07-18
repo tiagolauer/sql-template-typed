@@ -1,8 +1,8 @@
-# sql-template-typed
+# OwlSQL
 
 > Write raw SQL. Get fully-typed results. No codegen, no ORM, no runtime parsing.
 
-`sql-template-typed` reads your SQL **inside TypeScript's type system** and
+OwlSQL (`@owlsql/core`) reads your SQL **inside TypeScript's type system** and
 infers the row shape directly from the query string and your schema. The query
 `'select id, name from users'` becomes `{ id: number; name: string }[]` — at
 edit time, in your IDE, with zero build step.
@@ -145,7 +145,7 @@ lives in the `.d.ts` types.
 ## Install
 
 ```bash
-npm install sql-template-typed
+npm install @owlsql/core
 ```
 
 `typescript` is a peer dependency (**>= 5.0** — required for template literal
@@ -180,12 +180,12 @@ no runtime cost — it is erased during compilation. Mark nullable columns with
 `| null` (e.g. `bio: string | null`) and that nullability flows straight into
 your query results.
 
-**Optional: generate a starting point with `sql-template-typed generate`.**
+**Optional: generate a starting point with `owlsql generate`.**
 Writing that type by hand is fine for a handful of tables, but you can also
 have it generated from a real database:
 
 ```
-npx sql-template-typed generate --url postgres://user:pass@host/db --out schema.ts
+npx @owlsql/core generate --url postgres://user:pass@host/db --out schema.ts
 ```
 
 This connects to your database, introspects the tables/columns/nullability,
@@ -223,7 +223,7 @@ driver, and returns the raw rows.
 
 ```ts
 import { Pool } from 'pg';
-import { createTypedDb } from 'sql-template-typed';
+import { createTypedDb } from '@owlsql/core';
 
 const pool = new Pool();
 
@@ -242,7 +242,7 @@ against `DB`.
 union of success or error — so failures are values you handle explicitly.
 
 ```ts
-import { ResultStatus } from 'sql-template-typed';
+import { ResultStatus } from '@owlsql/core';
 
 const result = await db.query('select id, name from users');
 
@@ -261,7 +261,7 @@ for (const user of result.value) {
 Prefer a helper over the `status` field? `isOk` / `isErr` narrow the same way:
 
 ```ts
-import { isOk } from 'sql-template-typed';
+import { isOk } from '@owlsql/core';
 
 const result = await db.query('select id, email from users');
 
@@ -320,7 +320,7 @@ Sometimes you only want the *type* of a query — for an API contract, a DTO, or
 function signature — without running anything. Use the `Query` type directly:
 
 ```ts
-import type { Query } from 'sql-template-typed';
+import type { Query } from '@owlsql/core';
 
 type UserListRow = Query<DB, 'select id, email from users'>;
 //   ^? { id: number; email: string }[]
@@ -449,7 +449,7 @@ operator, and placeholder as separate tokens.
 ## Driver recipes
 
 The executor is the only thing that touches your database, so any driver
-works. For the most common drivers, `sql-template-typed` ships a ready-made
+works. For the most common drivers, OwlSQL ships a ready-made
 adapter — import it from its own subpath and pass your existing client
 straight in. No dependency is pulled in unless you import that specific
 subpath (each driver is an optional peer dependency).
@@ -458,7 +458,7 @@ subpath (each driver is an optional peer dependency).
 
 ```ts
 import { Pool } from 'pg';
-import { createPgExecutor } from 'sql-template-typed/pg';
+import { createPgExecutor } from '@owlsql/core/pg';
 
 const db = createTypedDb<DB>(createPgExecutor(new Pool()));
 ```
@@ -467,7 +467,7 @@ const db = createTypedDb<DB>(createPgExecutor(new Pool()));
 
 ```ts
 import { createPool } from 'mysql2/promise';
-import { createMysql2Executor } from 'sql-template-typed/mysql2';
+import { createMysql2Executor } from '@owlsql/core/mysql2';
 
 const db = createTypedDb<DB>(createMysql2Executor(createPool({ /* ... */ })));
 ```
@@ -476,7 +476,7 @@ const db = createTypedDb<DB>(createMysql2Executor(createPool({ /* ... */ })));
 
 ```ts
 import postgres from 'postgres';
-import { createPostgresJsExecutor } from 'sql-template-typed/postgres';
+import { createPostgresJsExecutor } from '@owlsql/core/postgres';
 
 const db = createTypedDb<DB>(createPostgresJsExecutor(postgres()));
 ```
@@ -485,7 +485,7 @@ const db = createTypedDb<DB>(createPostgresJsExecutor(postgres()));
 
 ```ts
 import { DatabaseSync } from 'node:sqlite';
-import { createNodeSqliteExecutor } from 'sql-template-typed/node-sqlite';
+import { createNodeSqliteExecutor } from '@owlsql/core/node-sqlite';
 
 const db = createTypedDb<DB>(createNodeSqliteExecutor(new DatabaseSync('app.db')));
 ```
@@ -504,7 +504,7 @@ const db = createTypedDb<DB>(async (sql, params) => sqlite.prepare(sql).all(...p
 
 ```ts
 import { Kysely, PostgresDialect } from 'kysely';
-import { createKyselyExecutor } from 'sql-template-typed/kysely';
+import { createKyselyExecutor } from '@owlsql/core/kysely';
 
 const kysely = new Kysely<KyselySchema>({ dialect: new PostgresDialect({ /* ... */ }) });
 const db = createTypedDb<DB>(createKyselyExecutor(kysely));
@@ -523,7 +523,7 @@ and reuse the matching adapter above — one extra line over the plain driver:
 
 ```ts
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { createPgExecutor } from 'sql-template-typed/pg';
+import { createPgExecutor } from '@owlsql/core/pg';
 
 const drizzleDb = drizzle(process.env.DATABASE_URL!);
 const db = createTypedDb<DB>(createPgExecutor(drizzleDb.$client));
@@ -582,7 +582,7 @@ db.query(`
 //              ^ autocomplete suggests `name`
 ```
 
-`sql-template-typed/ts-plugin` is a **TypeScript Language Service Plugin** —
+`@owlsql/core/ts-plugin` is a **TypeScript Language Service Plugin** —
 it runs inside `tsserver`, the same process that already powers VSCode's
 IntelliSense, and adds column-name completions while you're still typing the
 query string. This is a genuinely different mechanism from the rest of the
@@ -595,7 +595,7 @@ that isn't even valid SQL yet.
 ```json
 {
   "compilerOptions": {
-    "plugins": [{ "name": "sql-template-typed/ts-plugin" }]
+    "plugins": [{ "name": "@owlsql/core/ts-plugin" }]
   }
 }
 ```
@@ -655,11 +655,11 @@ ever required):
 
 | Export | Subpath | Description |
 | ------ | ------- | ----------- |
-| `createPgExecutor(pool)` | `sql-template-typed/pg` | `pg.Pool` → `Executor`. |
-| `createMysql2Executor(pool)` | `sql-template-typed/mysql2` | `mysql2/promise` `Pool` → `Executor`. |
-| `createPostgresJsExecutor(client)` | `sql-template-typed/postgres` | `postgres.Sql` → `Executor`. |
-| `createNodeSqliteExecutor(db)` | `sql-template-typed/node-sqlite` | `node:sqlite` `DatabaseSync` → `Executor`. |
-| `createKyselyExecutor(db)` | `sql-template-typed/kysely` | `Kysely<DB>` → `Executor`, via `CompiledQuery.raw`. |
+| `createPgExecutor(pool)` | `@owlsql/core/pg` | `pg.Pool` → `Executor`. |
+| `createMysql2Executor(pool)` | `@owlsql/core/mysql2` | `mysql2/promise` `Pool` → `Executor`. |
+| `createPostgresJsExecutor(client)` | `@owlsql/core/postgres` | `postgres.Sql` → `Executor`. |
+| `createNodeSqliteExecutor(db)` | `@owlsql/core/node-sqlite` | `node:sqlite` `DatabaseSync` → `Executor`. |
+| `createKyselyExecutor(db)` | `@owlsql/core/kysely` | `Kysely<DB>` → `Executor`, via `CompiledQuery.raw`. |
 
 **`query` return type.** `query` resolves to
 `Result<Query<DB, Q>, QueryError>`. On success, `result.value` holds the typed
