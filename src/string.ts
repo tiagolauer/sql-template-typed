@@ -69,3 +69,28 @@ type ScanParenGroup<
   : { inner: Inner; rest: '' };
 
 export type ExtractParenGroup<S extends string> = ScanParenGroup<S, [], ''>;
+
+export type OpenCount<
+  S extends string,
+  Accumulated extends unknown[] = [],
+> = S extends `${string}(${infer After}`
+  ? OpenCount<After, [...Accumulated, unknown]>
+  : Accumulated;
+
+export type CloseCount<
+  S extends string,
+  Accumulated extends unknown[] = [],
+> = S extends `${string})${infer After}`
+  ? CloseCount<After, [...Accumulated, unknown]>
+  : Accumulated;
+
+type PopN<Depth extends unknown[], N extends unknown[]> = N extends [unknown, ...infer NRest]
+  ? Depth extends [unknown, ...infer DepthRest]
+    ? PopN<DepthRest, NRest>
+    : Depth
+  : Depth;
+
+export type ApplyParenDelta<Depth extends unknown[], Token extends string> = PopN<
+  [...Depth, ...OpenCount<Token>],
+  CloseCount<Token>
+>;

@@ -8,6 +8,7 @@ import type {
   IsKeyword,
   Unquote,
   ExtractParenGroup,
+  ApplyParenDelta,
 } from './string.js';
 import type {
   IsFunctionCall,
@@ -50,13 +51,18 @@ type StripTopClause<S extends string> = IsKeyword<FirstWord<Trim<S>>, 'top'> ext
 
 type ColumnsBeforeFrom<
   S extends string,
+  Depth extends unknown[] = [],
   Accumulated extends string = '',
 > = S extends `${infer Head} ${infer Tail}`
-  ? IsKeyword<Head, 'from'> extends true
-    ? { columns: Trim<Accumulated>; afterFrom: Tail }
-    : ColumnsBeforeFrom<Tail, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
-  : IsKeyword<S, 'from'> extends true
-    ? { columns: Trim<Accumulated>; afterFrom: '' }
+  ? Depth extends []
+    ? IsKeyword<Head, 'from'> extends true
+      ? { columns: Trim<Accumulated>; afterFrom: Tail }
+      : ColumnsBeforeFrom<Tail, ApplyParenDelta<Depth, Head>, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
+    : ColumnsBeforeFrom<Tail, ApplyParenDelta<Depth, Head>, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
+  : Depth extends []
+    ? IsKeyword<S, 'from'> extends true
+      ? { columns: Trim<Accumulated>; afterFrom: '' }
+      : never
     : never;
 
 type AfterKeyword<S extends string, Keyword extends string> =
@@ -184,6 +190,18 @@ type IsWindowExpression<Entry extends string> = [SplitWindowExpression<Entry>] e
   ? false
   : true;
 
+type SplitParenthesizedEntry<Entry extends string> = StripLeadingOpenParen<Entry> extends infer AfterOpen extends string
+  ? [AfterOpen] extends [never]
+    ? never
+    : ExtractParenGroup<AfterOpen> extends { inner: infer Inner extends string; rest: infer AfterClose extends string }
+      ? { expr: `(${Inner})`; after: Trim<AfterClose> }
+      : never
+  : never;
+
+type IsParenthesizedEntry<Entry extends string> = [SplitParenthesizedEntry<Entry>] extends [never]
+  ? false
+  : true;
+
 type ParseColumnEntry<Entry extends string> = IsCaseExpression<Entry> extends true
   ? SplitCaseExpression<Entry> extends { body: infer Body extends string; alias: infer Alias extends string }
     ? [Alias, `case ${Body} end`]
@@ -196,7 +214,15 @@ type ParseColumnEntry<Entry extends string> = IsCaseExpression<Entry> extends tr
           ? [Unquote<Trim<DropFirstWord<After>>>, Expr]
           : [Unquote<Trim<After>>, Expr]
       : [OutputName<Trim<Entry>>, Trim<Entry>]
-    : Entry extends `${infer Expression} ${infer Middle} ${infer Alias}`
+    : IsParenthesizedEntry<Entry> extends true
+      ? SplitParenthesizedEntry<Entry> extends { expr: infer Expr extends string; after: infer After extends string }
+        ? After extends ''
+          ? [Trim<Entry>, Expr]
+          : IsKeyword<FirstWord<After>, 'as'> extends true
+            ? [Unquote<Trim<DropFirstWord<After>>>, Expr]
+            : [Unquote<Trim<After>>, Expr]
+        : [Trim<Entry>, Trim<Entry>]
+      : Entry extends `${infer Expression} ${infer Middle} ${infer Alias}`
       ? IsKeyword<Middle, 'as'> extends true
         ? [Unquote<Trim<Alias>>, Trim<Expression>]
         : [OutputName<Entry>, Entry]
