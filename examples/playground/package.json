@@ -1,0 +1,14 @@
+{
+  "name": "owlsql-playground",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@owlsql/core": "^0.1.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "owlsql-ts-plugin-demo",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@owlsql/core": "^0.1.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

@@ -16,6 +16,9 @@ if (result.status === ResultStatus.Ok) {
 }
 ```
 
+**[Try it in your browser →](https://stackblitz.com/github/tiagolauer/OwlSQL/tree/master/examples/playground?file=index.ts)**
+No install, no database — see [`examples/playground`](examples/playground).
+
 ---
 
 ## Table of contents
@@ -582,6 +585,10 @@ db.query(`
 //              ^ autocomplete suggests `name`
 ```
 
+Want to see it running for yourself before there's a recorded demo here?
+[`examples/ts-plugin-demo`](examples/ts-plugin-demo) is a ready-to-open
+VSCode project set up for exactly that.
+
 `@owlsql/core/ts-plugin` is a **TypeScript Language Service Plugin** —
 it runs inside `tsserver`, the same process that already powers VSCode's
 IntelliSense, and adds column-name completions while you're still typing the
@@ -776,7 +783,9 @@ to handle it and keeps error handling explicit and type-checked.
 ## Contributing
 
 Building, testing, and publishing are documented in
-[CONTRIBUTING.md](CONTRIBUTING.md).
+[CONTRIBUTING.md](CONTRIBUTING.md). Not sure where to start? Check
+[ROADMAP.md](ROADMAP.md) — it lists what's shipped, what's in progress, and
+issues labeled [`good first issue`](https://github.com/tiagolauer/OwlSQL/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
 
 ## License
 
