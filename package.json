@@ -34,6 +34,10 @@
     "./kysely": {
       "types": "./dist/adapters/kysely.d.ts",
       "import": "./dist/adapters/kysely.js"
+    },
+    "./ts-plugin": {
+      "types": "./dist/ts-plugin/index.d.cts",
+      "require": "./dist/ts-plugin/index.cjs"
     }
   },
   "files": [
@@ -44,9 +48,9 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.ts-plugin.json",
     "typecheck": "tsc --noEmit",
-    "test:types": "tsc --noEmit -p tsconfig.json",
+    "test:types": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.ts-plugin.json",
     "test:runtime": "vitest run",
     "test": "npm run test:types && npm run test:runtime",
     "prepublishOnly": "npm run test && npm run build"

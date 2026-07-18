@@ -37,6 +37,7 @@ if (result.status === ResultStatus.Ok) {
   - [10. Typed parameters](#10-typed-parameters)
 - [Driver recipes](#driver-recipes)
 - [Database support](#database-support)
+- [Editor autocomplete](#editor-autocomplete)
 - [API reference](#api-reference)
 - [Supported SQL subset](#supported-sql-subset)
 - [Limitations](#limitations)
@@ -567,6 +568,59 @@ See [`tests/dialect-postgres.test-d.ts`](tests/dialect-postgres.test-d.ts),
 [`tests/dialect-sqlite.test-d.ts`](tests/dialect-sqlite.test-d.ts), and
 [`tests/dialect-mssql.test-d.ts`](tests/dialect-mssql.test-d.ts) for the exact
 query shapes each engine is tested against.
+
+## Editor autocomplete
+
+```ts
+db.query(`
+  select id, na
+`)
+//              ^ autocomplete suggests `name`
+```
+
+`sql-template-typed/ts-plugin` is a **TypeScript Language Service Plugin** —
+it runs inside `tsserver`, the same process that already powers VSCode's
+IntelliSense, and adds column-name completions while you're still typing the
+query string. This is a genuinely different mechanism from the rest of the
+library: everything else works by *type-checking* a finished query string;
+this works by hooking into the editor's completion request for a string
+that isn't even valid SQL yet.
+
+**Setup** — add it to your `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "plugins": [{ "name": "sql-template-typed/ts-plugin" }]
+  }
+}
+```
+
+Then, in VSCode, open the Command Palette and run **"TypeScript: Select
+TypeScript Version" → "Use Workspace Version"**. This step is not optional —
+VSCode's *bundled* TypeScript does not load workspace plugins, so skipping it
+is the #1 reason this kind of plugin appears to do nothing. Other editors
+that talk to `tsserver` (Cursor, some Neovim/Sublime LSP setups) generally
+pick up `tsconfig.json` plugins automatically.
+
+**What v1 does:** suggests column names right after `SELECT` or a comma in
+the column list, for `db.query(...)` calls made through a client built with
+`createTypedDb<DB>`. If a `FROM <table>` is already present anywhere later in
+the same string, suggestions are scoped to that table; otherwise you get the
+deduplicated union of every table's columns in `DB` — which is exactly what
+covers the example above before you've typed `FROM` at all.
+
+**What v1 does not do** (documented scope, not bugs):
+
+- No hover info and no inline diagnostics/squiggles — completions only.
+- No `JOIN`/alias awareness — only the first `FROM <table>` in the string is
+  used to scope suggestions; a second table from a `JOIN` is not offered.
+- Only plain string/template literals with **no interpolation**
+  (`` db.query(`select ...`) ``) are recognized — which is the only form the
+  library ever expects you to write, since parameters are SQL placeholders
+  (`$1`/`?`/`@name`), never JS template interpolation.
+- Completions after `WHERE`/`ORDER BY`/etc. aren't offered yet — only the
+  `SELECT` column list.
 
 ## API reference
 
