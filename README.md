@@ -119,6 +119,10 @@ powerful enough to parse a `SELECT` and map columns to a schema, entirely at
 type-check time. So I wrote that. No DSL, no generated files, no build step —
 just the SQL I was already writing, now correctly typed.
 
+For a detailed, sourced comparison against Prisma, Kysely, pgTyped, and
+Zapatos on build step, runtime cost, bundle size, and DX (not runtime query
+speed), see [COMPARISON.md](COMPARISON.md).
+
 ## How it works
 
 There is no runtime SQL parser and no build step. The entire parser is written
