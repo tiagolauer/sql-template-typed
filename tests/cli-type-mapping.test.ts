@@ -73,7 +73,7 @@ describe('mapSqliteType', () => {
   });
 
   it('special-cases BOOLEAN and DATE-like declared types', () => {
-    expect(mapSqliteType('BOOLEAN')).toBe('boolean');
+    expect(mapSqliteType('BOOLEAN')).toBe('0 | 1');
     expect(mapSqliteType('DATE')).toBe('string');
     expect(mapSqliteType('DATETIME')).toBe('string');
   });

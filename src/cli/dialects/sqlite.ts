@@ -4,7 +4,7 @@ export function mapSqliteType(declaredType: string): string {
   const type = declaredType.toUpperCase().trim();
 
   if (type === 'BOOLEAN') {
-    return 'boolean';
+    return '0 | 1';
   }
 
   if (type === 'DATE' || type === 'DATETIME' || type === 'TIMESTAMP') {

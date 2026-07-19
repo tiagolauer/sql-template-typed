@@ -36,7 +36,7 @@ describe('introspectSqlite', () => {
         { name: 'id', tsType: 'number', nullable: true },
         { name: 'name', tsType: 'string', nullable: false },
         { name: 'bio', tsType: 'string', nullable: true },
-        { name: 'active', tsType: 'boolean', nullable: false },
+        { name: 'active', tsType: '0 | 1', nullable: false },
       ]);
     } finally {
       rmSync(join(file, '..'), { recursive: true, force: true });
