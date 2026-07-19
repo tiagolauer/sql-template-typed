@@ -202,6 +202,18 @@ type IsParenthesizedEntry<Entry extends string> = [SplitParenthesizedEntry<Entry
   ? false
   : true;
 
+type FindTopLevelAsKeyword<
+  S extends string,
+  Depth extends unknown[] = [],
+  Accumulated extends string = '',
+> = S extends `${infer Head} ${infer Tail}`
+  ? Depth extends []
+    ? IsKeyword<Head, 'as'> extends true
+      ? { expr: Trim<Accumulated>; alias: Tail }
+      : FindTopLevelAsKeyword<Tail, ApplyParenDelta<Depth, Head>, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
+    : FindTopLevelAsKeyword<Tail, ApplyParenDelta<Depth, Head>, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
+  : never;
+
 type ParseColumnEntry<Entry extends string> = IsCaseExpression<Entry> extends true
   ? SplitCaseExpression<Entry> extends { body: infer Body extends string; alias: infer Alias extends string }
     ? [Alias, `case ${Body} end`]
@@ -222,12 +234,12 @@ type ParseColumnEntry<Entry extends string> = IsCaseExpression<Entry> extends tr
             ? [Unquote<Trim<DropFirstWord<After>>>, Expr]
             : [Unquote<Trim<After>>, Expr]
         : [Trim<Entry>, Trim<Entry>]
-      : Entry extends `${infer Expression} ${infer Middle} ${infer Alias}`
-      ? IsKeyword<Middle, 'as'> extends true
+      : [FindTopLevelAsKeyword<Entry>] extends [never]
+      ? Entry extends `${infer Expression} ${infer Alias}`
         ? [Unquote<Trim<Alias>>, Trim<Expression>]
-        : [OutputName<Entry>, Entry]
-      : Entry extends `${infer Expression} ${infer Alias}`
-        ? [Unquote<Trim<Alias>>, Trim<Expression>]
+        : [OutputName<Trim<Entry>>, Trim<Entry>]
+      : FindTopLevelAsKeyword<Entry> extends { expr: infer Expr extends string; alias: infer Alias extends string }
+        ? [Unquote<Trim<Alias>>, Expr]
         : [OutputName<Trim<Entry>>, Trim<Entry>];
 
 type ParseColumnEntries<Columns extends string[]> = {

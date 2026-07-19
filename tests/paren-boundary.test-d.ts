@@ -33,10 +33,10 @@ type ParenthesizedArithmeticGroupResolvesAlias = Expect<
   >
 >;
 
-type FunctionArgWithFromKeywordKeepsSiblingColumns = Expect<
+type FunctionArgWithFromKeywordResolvesAlias = Expect<
   Equal<
     Query<DB, 'select extract(year from created_at) as y, id from users'>,
-    { 'extract(year from created_at) as y': unknown; id: number }[]
+    { y: unknown; id: number }[]
   >
 >;
 
@@ -44,5 +44,5 @@ export type BehaviorLock = [
   ScalarSubqueryKeepsSiblingColumns,
   ScalarSubqueryNoAliasFallsBackToRawText,
   ParenthesizedArithmeticGroupResolvesAlias,
-  FunctionArgWithFromKeywordKeepsSiblingColumns,
+  FunctionArgWithFromKeywordResolvesAlias,
 ];
