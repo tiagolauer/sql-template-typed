@@ -4,7 +4,7 @@ import { runGenerate } from './generate.js';
 
 const DIALECTS: Dialect[] = ['postgres', 'mysql', 'sqlite', 'mssql'];
 
-function parseFlags(args: string[]): Map<string, string> {
+export function parseFlags(args: string[]): Map<string, string> {
   const flags = new Map<string, string>();
 
   for (let index = 0; index < args.length; index += 1) {
@@ -13,13 +13,19 @@ function parseFlags(args: string[]): Map<string, string> {
       continue;
     }
 
-    const name = arg.slice(2);
-    const value = args[index + 1];
-    if (value === undefined || value.startsWith('--')) {
-      throw new Error(`Missing value for --${name}`);
+    const body = arg.slice(2);
+    const equalsIndex = body.indexOf('=');
+    if (equalsIndex !== -1) {
+      flags.set(body.slice(0, equalsIndex), body.slice(equalsIndex + 1));
+      continue;
     }
 
-    flags.set(name, value);
+    const value = args[index + 1];
+    if (value === undefined || value.startsWith('--')) {
+      throw new Error(`Missing value for --${body}`);
+    }
+
+    flags.set(body, value);
     index += 1;
   }
 
