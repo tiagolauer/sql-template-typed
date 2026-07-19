@@ -53,16 +53,21 @@ export async function introspectMssql(connection: ConnectionInfo): Promise<Table
   }
 
   const pool = await connect(connection.url);
+  const schema = connection.schema ?? 'dbo';
 
   try {
-    const result = await pool.request().query<MssqlColumnRow>(
-      `select t.name as table_name, c.name as column_name, ty.name as data_type,
-              c.is_nullable as is_nullable
-       from sys.tables t
-       join sys.columns c on c.object_id = t.object_id
-       join sys.types ty on ty.user_type_id = c.user_type_id
-       order by t.name, c.column_id`,
-    );
+    const result = await pool
+      .request()
+      .input('schema', schema)
+      .query<MssqlColumnRow>(
+        `select t.name as table_name, c.name as column_name, ty.name as data_type,
+                c.is_nullable as is_nullable
+         from sys.tables t
+         join sys.columns c on c.object_id = t.object_id
+         join sys.types ty on ty.user_type_id = c.user_type_id
+         where schema_name(t.schema_id) = @schema
+         order by t.name, c.column_id`,
+      );
 
     return groupColumns(result.recordset);
   } finally {

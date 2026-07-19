@@ -205,7 +205,7 @@ commit it, edit it by hand afterward, rename fields, anything. Running
 | `--url` | yes | Connection string (or a file path for SQLite). |
 | `--out` | no | Output file. Defaults to `./schema.ts`. |
 | `--dialect` | no | `postgres` \| `mysql` \| `sqlite` \| `mssql`. Auto-detected from the URL scheme (`postgres://`/`postgresql://`, `mysql://`, `mssql://`/`sqlserver://`) — falls back to `sqlite` for a bare file path, so it's only needed when that's ambiguous. |
-| `--schema` | no | Schema/database name to introspect. Defaults to `public` (Postgres) or the connected database (MySQL). Not used for SQLite/SQL Server. |
+| `--schema` | no | Schema/database name to introspect. Defaults to `public` (Postgres), the connected database (MySQL), or `dbo` (SQL Server). Not used for SQLite. |
 
 `generate` needs the matching driver installed as a real dependency (`pg`,
 `mysql2`, or `mssql` — SQLite uses the `node:sqlite` builtin, Node ≥22.5). It
