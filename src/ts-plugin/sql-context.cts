@@ -1,5 +1,6 @@
 const SELECT_START = /^select\b/i;
 const HAS_FROM = /\bfrom\b/i;
+const HAS_WHERE = /\bwhere\b/i;
 const TRAILING_WORD = /([A-Za-z_][A-Za-z0-9_]*)$/;
 const FROM_TABLE = /\bfrom\s+([A-Za-z_][A-Za-z0-9_]*)/i;
 const WORD_CHAR = /[A-Za-z0-9_]/;
@@ -23,6 +24,19 @@ function getSelectListContext(textBeforeCursor: string): SelectListContext | nul
   }
 
   if (HAS_FROM.test(textBeforeCursor)) {
+    return null;
+  }
+
+  const match = TRAILING_WORD.exec(textBeforeCursor);
+  return { prefix: match?.[1] ?? '' };
+}
+
+function getWhereClauseContext(textBeforeCursor: string): SelectListContext | null {
+  if (!HAS_FROM.test(textBeforeCursor)) {
+    return null;
+  }
+
+  if (!HAS_WHERE.test(textBeforeCursor)) {
     return null;
   }
 
@@ -62,4 +76,4 @@ function getWordAtOffset(text: string, offset: number): WordAtOffset | null {
   return { word, start, end };
 }
 
-export = { getSelectListContext, findFromTable, getWordAtOffset };
+export = { getSelectListContext, getWhereClauseContext, findFromTable, getWordAtOffset };

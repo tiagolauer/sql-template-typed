@@ -3,7 +3,7 @@ import sqlContext = require('./sql-context.cjs');
 import schemaModule = require('./schema.cjs');
 import detectModule = require('./detect.cjs');
 
-const { getSelectListContext, findFromTable, getWordAtOffset } = sqlContext;
+const { getSelectListContext, getWhereClauseContext, findFromTable, getWordAtOffset } = sqlContext;
 const { getColumnNames, getColumnType } = schemaModule;
 const { matchQueryLiteral } = detectModule;
 
@@ -41,7 +41,7 @@ function init(modules: { typescript: typeof ts }) {
 
       const literalStart = match.literal.getStart(sourceFile) + 1;
       const textBeforeCursor = sourceFile.text.slice(literalStart, position);
-      const context = getSelectListContext(textBeforeCursor);
+      const context = getSelectListContext(textBeforeCursor) ?? getWhereClauseContext(textBeforeCursor);
       if (!context) {
         return prior;
       }
