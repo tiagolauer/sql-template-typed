@@ -119,6 +119,26 @@ type ScanParenGroup<
 
 export type ExtractParenGroup<S extends string> = ScanParenGroup<S, [], ''>;
 
+type ScanColumnList<
+  S extends string,
+  Depth extends unknown[],
+  Current extends string,
+> = S extends `${infer Char}${infer Rest}`
+  ? Char extends '('
+    ? ScanColumnList<Rest, [...Depth, unknown], `${Current}${Char}`>
+    : Char extends ')'
+      ? Depth extends [unknown, ...infer DepthRest extends unknown[]]
+        ? ScanColumnList<Rest, DepthRest, `${Current}${Char}`>
+        : ScanColumnList<Rest, Depth, `${Current}${Char}`>
+      : Char extends ','
+        ? Depth extends []
+          ? [Trim<Current>, ...ScanColumnList<Rest, Depth, ''>]
+          : ScanColumnList<Rest, Depth, `${Current}${Char}`>
+        : ScanColumnList<Rest, Depth, `${Current}${Char}`>
+  : [Trim<Current>];
+
+export type SplitColumnList<S extends string> = ScanColumnList<S, [], ''>;
+
 export type OpenCount<
   S extends string,
   Accumulated extends unknown[] = [],

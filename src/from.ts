@@ -7,6 +7,7 @@ import type {
   StripQualifier,
   ExtractParenGroup,
   ApplyParenDelta,
+  SplitColumnList,
 } from './string.js';
 
 export interface Source {
@@ -149,6 +150,18 @@ type SegmentToSource<Segment extends string, Nullable extends boolean> = Trim<Se
       }
     : never;
 
+type PartsToSources<Parts extends string[], Nullable extends boolean> = Parts extends [
+  infer Head extends string,
+  ...infer Tail extends string[],
+]
+  ? [SegmentToSource<Head, Nullable>, ...PartsToSources<Tail, Nullable>]
+  : [];
+
+type SegmentToSources<Segment extends string, Nullable extends boolean> = PartsToSources<
+  SplitColumnList<Segment>,
+  Nullable
+>;
+
 type MarkNullable<Sources extends Source[]> = {
   [Index in keyof Sources]: Sources[Index] extends { derivedQuery: infer Q extends string }
     ? { table: Sources[Index]['table']; alias: Sources[Index]['alias']; nullable: true; derivedQuery: Q }
@@ -161,7 +174,7 @@ type CollectSources<
   Accumulated extends Source[] = [],
 > = SplitAtFirstJoin<S> extends infer Split
   ? [Split] extends [never]
-    ? [...Accumulated, SegmentToSource<S, Nullable>]
+    ? [...Accumulated, ...SegmentToSources<S, Nullable>]
     : Split extends {
           before: infer Before extends string;
           joined: infer Joined extends boolean;
@@ -172,10 +185,10 @@ type CollectSources<
         ? CollectSources<
             After,
             Joined,
-            [...MarkNullable<Accumulated>, SegmentToSource<Before, true>]
+            [...MarkNullable<Accumulated>, ...SegmentToSources<Before, true>]
           >
-        : CollectSources<After, Joined, [...Accumulated, SegmentToSource<Before, Nullable>]>
-      : [...Accumulated, SegmentToSource<S, Nullable>]
+        : CollectSources<After, Joined, [...Accumulated, ...SegmentToSources<Before, Nullable>]>
+      : [...Accumulated, ...SegmentToSources<S, Nullable>]
   : never;
 
 export type ParseFromClause<AfterFrom extends string> = CollectSources<
