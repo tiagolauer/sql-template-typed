@@ -50,34 +50,6 @@ type IsNotDistinctFromParam = Expect<
   >
 >;
 
-type IsNullDoesNotAffectArity = Expect<
-  Equal<
-    Params<DB, 'select id from users where deleted_at is null and id = $1'>,
-    [number]
-  >
->;
-
-type IsNotNullDoesNotAffectArity = Expect<
-  Equal<
-    Params<DB, 'select id from users where deleted_at is not null and id = $1'>,
-    [number]
-  >
->;
-
-type IsDistinctFromParam = Expect<
-  Equal<
-    Params<DB, 'select id from users where deleted_at is distinct from $1'>,
-    [string | null]
-  >
->;
-
-type IsNotDistinctFromParam = Expect<
-  Equal<
-    Params<DB, 'select id from users where deleted_at is not distinct from $1'>,
-    [string | null]
-  >
->;
-
 type IsDistinctFromCombinedWithAnotherCondition = Expect<
   Equal<
     Params<DB, 'select id from users where deleted_at is distinct from $1 and id = $2'>,
@@ -91,6 +63,20 @@ type MakingFromTransparentDoesNotBreakJoinParams = Expect<
       DB,
       'select u.name from users u join orders o on u.id = o.user_id where o.price > $1'
     >,
+    [number]
+  >
+>;
+
+type IsNullDoesNotAffectArity = Expect<
+  Equal<
+    Params<DB, 'select id from users where deleted_at is null and id = $1'>,
+    [number]
+  >
+>;
+
+type IsNotNullDoesNotAffectArity = Expect<
+  Equal<
+    Params<DB, 'select id from users where deleted_at is not null and id = $1'>,
     [number]
   >
 >;
@@ -118,12 +104,10 @@ export type WhereLock = [
   BetweenParams,
   IsDistinctFromParam,
   IsNotDistinctFromParam,
-  IsNullDoesNotAffectArity,
-  IsNotNullDoesNotAffectArity,
-  IsDistinctFromParam,
-  IsNotDistinctFromParam,
   IsDistinctFromCombinedWithAnotherCondition,
   MakingFromTransparentDoesNotBreakJoinParams,
+  IsNullDoesNotAffectArity,
+  IsNotNullDoesNotAffectArity,
   MultipleAndConditions,
   OrConditions,
 ];
