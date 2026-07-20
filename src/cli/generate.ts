@@ -15,6 +15,8 @@ export interface GenerateOptions {
 
 const SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
 
+const ADO_MSSQL_PATTERN = /(^|;)\s*(server|data source|address|addr|network address)\s*=/i;
+
 const CREDENTIALS_PATTERN = /\/\/[^@/]+@/;
 
 export function redactCredentials(url: string): string {
@@ -31,6 +33,10 @@ export function detectDialect(url: string): Dialect {
   }
 
   if (url.startsWith('mssql://') || url.startsWith('sqlserver://')) {
+    return 'mssql';
+  }
+
+  if (ADO_MSSQL_PATTERN.test(url)) {
     return 'mssql';
   }
 

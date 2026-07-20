@@ -202,9 +202,9 @@ commit it, edit it by hand afterward, rename fields, anything. Running
 
 | Flag | Required | Description |
 | ---- | -------- | ----------- |
-| `--url` | yes | Connection string (or a file path for SQLite). |
+| `--url` | yes | Connection string (or a file path for SQLite). SQL Server accepts both `mssql://user:pass@host:1433/db` (translated to a driver config; `?encrypt=false` and `?trustServerCertificate=true` supported) and an ADO string (`Server=host;Database=db;User Id=u;Password=p`). |
 | `--out` | no | Output file. Defaults to `./schema.ts`. |
-| `--dialect` | no | `postgres` \| `mysql` \| `sqlite` \| `mssql`. Auto-detected from the URL scheme (`postgres://`/`postgresql://`, `mysql://`, `mssql://`/`sqlserver://`) — falls back to `sqlite` for a bare file path, so it's only needed when that's ambiguous. |
+| `--dialect` | no | `postgres` \| `mysql` \| `sqlite` \| `mssql`. Auto-detected from the URL scheme (`postgres://`/`postgresql://`, `mysql://`, `mssql://`/`sqlserver://`); an ADO `Server=...` string also routes to `mssql` — falls back to `sqlite` for a bare file path, so it's only needed when that's ambiguous. |
 | `--schema` | no | Schema/database name to introspect. Defaults to `public` (Postgres), the connected database (MySQL), or `dbo` (SQL Server). Not used for SQLite. |
 
 `generate` needs the matching driver installed as a real dependency (`pg`,
