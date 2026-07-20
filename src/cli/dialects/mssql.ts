@@ -42,6 +42,49 @@ interface MssqlColumnRow {
   is_nullable: boolean;
 }
 
+export interface MssqlConnectionConfig {
+  server: string;
+  user?: string;
+  password?: string;
+  database?: string;
+  port?: number;
+  options: {
+    encrypt: boolean;
+    trustServerCertificate: boolean;
+  };
+}
+
+const MSSQL_URL_PATTERN = /^(mssql|sqlserver):\/\//i;
+
+export function mssqlUrlToConfig(url: string): MssqlConnectionConfig {
+  const parsed = new URL(url);
+  const flags = parsed.searchParams;
+
+  const config: MssqlConnectionConfig = {
+    server: decodeURIComponent(parsed.hostname),
+    options: {
+      encrypt: flags.get('encrypt') !== 'false',
+      trustServerCertificate: flags.get('trustServerCertificate') === 'true',
+    },
+  };
+
+  if (parsed.username) {
+    config.user = decodeURIComponent(parsed.username);
+  }
+  if (parsed.password) {
+    config.password = decodeURIComponent(parsed.password);
+  }
+  const database = parsed.pathname.replace(/^\//, '');
+  if (database) {
+    config.database = decodeURIComponent(database);
+  }
+  if (parsed.port) {
+    config.port = Number(parsed.port);
+  }
+
+  return config;
+}
+
 export async function introspectMssql(connection: ConnectionInfo): Promise<TableSchema[]> {
   let connect: typeof import('mssql').connect;
   try {
@@ -52,7 +95,9 @@ export async function introspectMssql(connection: ConnectionInfo): Promise<Table
     );
   }
 
-  const pool = await connect(connection.url);
+  const pool = MSSQL_URL_PATTERN.test(connection.url)
+    ? await connect(mssqlUrlToConfig(connection.url) as import('mssql').config)
+    : await connect(connection.url);
   const schema = connection.schema ?? 'dbo';
 
   try {
