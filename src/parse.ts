@@ -55,6 +55,20 @@ type StripTopClause<S extends string> = IsKeyword<FirstWord<Trim<S>>, 'top'> ext
     : S
   : S;
 
+type StripDistinctOn<S extends string> = IsKeyword<FirstWord<S>, 'on'> extends true
+  ? Trim<DropFirstWord<S>> extends `(${infer AfterOpen}`
+    ? ExtractParenGroup<AfterOpen> extends { rest: infer Rest extends string }
+      ? Trim<Rest>
+      : S
+    : S
+  : S;
+
+type StripDistinctClause<S extends string> = IsKeyword<FirstWord<Trim<S>>, 'distinct'> extends true
+  ? StripDistinctOn<Trim<DropFirstWord<Trim<S>>>>
+  : IsKeyword<FirstWord<Trim<S>>, 'all'> extends true
+    ? Trim<DropFirstWord<Trim<S>>>
+    : S;
+
 type ColumnsBeforeFrom<
   S extends string,
   Depth extends unknown[] = [],
@@ -135,7 +149,7 @@ export interface ParsedStatement {
 
 type ParseSelectBody<S extends string> = StatementAfterSelect<S> extends infer Body
   ? Body extends string
-    ? ColumnsBeforeFrom<StripTopClause<Body>> extends {
+    ? ColumnsBeforeFrom<StripTopClause<StripDistinctClause<Body>>> extends {
         columns: infer Columns extends string;
         afterFrom: infer AfterFrom;
       }
