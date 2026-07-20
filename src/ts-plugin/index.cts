@@ -3,8 +3,8 @@ import sqlContext = require('./sql-context.cjs');
 import schemaModule = require('./schema.cjs');
 import detectModule = require('./detect.cjs');
 
-const { getSelectListContext, findFromTable } = sqlContext;
-const { getColumnNames } = schemaModule;
+const { getSelectListContext, findFromTable, getWordAtOffset } = sqlContext;
+const { getColumnNames, getColumnType } = schemaModule;
 const { matchQueryLiteral } = detectModule;
 
 function init(modules: { typescript: typeof ts }) {
@@ -64,6 +64,45 @@ function init(modules: { typescript: typeof ts }) {
     };
 
     proxy.getCompletionsAtPosition = getCompletionsAtPosition;
+
+    const getQuickInfoAtPosition: ts.LanguageService['getQuickInfoAtPosition'] = (fileName, position) => {
+      const prior = info.languageService.getQuickInfoAtPosition(fileName, position);
+
+      const program = info.languageService.getProgram();
+      const sourceFile = program?.getSourceFile(fileName);
+      if (!program || !sourceFile) {
+        return prior;
+      }
+
+      const checker = program.getTypeChecker();
+      const match = matchQueryLiteral(typescript, checker, sourceFile, position);
+      if (!match) {
+        return prior;
+      }
+
+      const literalStart = match.literal.getStart(sourceFile) + 1;
+      const word = getWordAtOffset(match.literal.text, position - literalStart);
+      if (!word) {
+        return prior;
+      }
+
+      const table = findFromTable(match.literal.text);
+      const columnType = getColumnType(checker, match.dbType, match.literal, table, word.word);
+      if (!columnType) {
+        return prior;
+      }
+
+      const typeText = checker.typeToString(columnType);
+
+      return {
+        kind: typescript.ScriptElementKind.memberVariableElement,
+        kindModifiers: '',
+        textSpan: { start: literalStart + word.start, length: word.end - word.start },
+        displayParts: [{ text: `(column) ${word.word}: ${typeText}`, kind: 'text' }],
+      };
+    };
+
+    proxy.getQuickInfoAtPosition = getQuickInfoAtPosition;
 
     return proxy as unknown as ts.LanguageService;
   }

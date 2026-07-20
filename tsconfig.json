@@ -15,5 +15,10 @@
     "forceConsistentCasingInFileNames": true
   },
   "include": ["src", "tests"],
-  "exclude": ["src/ts-plugin", "tests/ts-plugin-sql-context.test.ts", "tests/ts-plugin-completions.test.ts"]
+  "exclude": [
+    "src/ts-plugin",
+    "tests/ts-plugin-sql-context.test.ts",
+    "tests/ts-plugin-completions.test.ts",
+    "tests/ts-plugin-hover.test.ts"
+  ]
 }

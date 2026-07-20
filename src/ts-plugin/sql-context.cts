@@ -2,9 +2,17 @@ const SELECT_START = /^select\b/i;
 const HAS_FROM = /\bfrom\b/i;
 const TRAILING_WORD = /([A-Za-z_][A-Za-z0-9_]*)$/;
 const FROM_TABLE = /\bfrom\s+([A-Za-z_][A-Za-z0-9_]*)/i;
+const WORD_CHAR = /[A-Za-z0-9_]/;
+const WORD_START_CHAR = /[A-Za-z_]/;
 
 interface SelectListContext {
   prefix: string;
+}
+
+interface WordAtOffset {
+  word: string;
+  start: number;
+  end: number;
 }
 
 function getSelectListContext(textBeforeCursor: string): SelectListContext | null {
@@ -27,4 +35,31 @@ function findFromTable(fullLiteralText: string): string | null {
   return match?.[1] ?? null;
 }
 
-export = { getSelectListContext, findFromTable };
+function getWordAtOffset(text: string, offset: number): WordAtOffset | null {
+  if (offset < 0 || offset > text.length) {
+    return null;
+  }
+
+  let start = offset;
+  while (start > 0 && WORD_CHAR.test(text[start - 1] ?? '')) {
+    start -= 1;
+  }
+
+  let end = offset;
+  while (end < text.length && WORD_CHAR.test(text[end] ?? '')) {
+    end += 1;
+  }
+
+  if (start === end) {
+    return null;
+  }
+
+  const word = text.slice(start, end);
+  if (!WORD_START_CHAR.test(word[0] ?? '')) {
+    return null;
+  }
+
+  return { word, start, end };
+}
+
+export = { getSelectListContext, findFromTable, getWordAtOffset };

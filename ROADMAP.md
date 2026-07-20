@@ -18,8 +18,8 @@ the editor tooling, not a promise of dates.
   Kysely) and a documented Drizzle recipe.
 - `npx @owlsql/core generate` — schema introspection CLI for all four
   databases.
-- `@owlsql/core/ts-plugin` — in-editor column-name autocomplete
-  (v1: `SELECT`-list completions only).
+- `@owlsql/core/ts-plugin` — in-editor column-name autocomplete and
+  hover info (resolved column type on hover).
 - [COMPARISON.md](COMPARISON.md) — sourced comparison vs Prisma/Kysely/
   pgTyped/Zapatos on build step, runtime cost, bundle size, and DX.
 
@@ -32,11 +32,10 @@ first-timer-sized, but open if you want to dig in:
   by design — see [Limitations](README.md#limitations)). Needs the same
   balanced-paren extraction used for CTEs/derived tables, applied at an
   arbitrary expression position instead of only in `FROM`.
-- **`ts-plugin` v2**: hover info (column type on hover), inline diagnostics
-  for unknown columns/tables (reusing strict-mode's `QueryTypeError` logic
-  but surfaced as a `tsserver` diagnostic instead of a type), and `JOIN`/
-  alias-aware completions (right now only the first `FROM <table>` is used
-  to scope suggestions).
+- **`ts-plugin` v2**: inline diagnostics for unknown columns/tables (reusing
+  strict-mode's `QueryTypeError` logic but surfaced as a `tsserver`
+  diagnostic instead of a type), and `JOIN`/alias-aware completions and
+  hover (right now only the first `FROM <table>` is used to scope both).
 - **Typed params inside a `WITH` CTE's own subquery body** — a placeholder
   written inside a CTE's own definition still can't be typed; the whole
   query falls back to `unknown[]` rather than mistyping it. (`INSERT ...

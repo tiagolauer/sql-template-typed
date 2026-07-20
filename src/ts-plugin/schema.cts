@@ -26,4 +26,31 @@ function getColumnNames(
   return [...columnNames];
 }
 
-export = { getColumnNames };
+function getColumnType(
+  checker: ts.TypeChecker,
+  dbType: ts.Type,
+  node: ts.Node,
+  onlyTable: string | null,
+  columnName: string,
+): ts.Type | null {
+  const tableSymbols = dbType.getProperties();
+
+  const scopedTables = onlyTable
+    ? tableSymbols.filter((symbol) => symbol.getName() === onlyTable)
+    : tableSymbols;
+
+  const tables = scopedTables.length > 0 ? scopedTables : tableSymbols;
+
+  for (const tableSymbol of tables) {
+    const tableType = checker.getTypeOfSymbolAtLocation(tableSymbol, node);
+    for (const columnSymbol of tableType.getProperties()) {
+      if (columnSymbol.getName() === columnName) {
+        return checker.getTypeOfSymbolAtLocation(columnSymbol, node);
+      }
+    }
+  }
+
+  return null;
+}
+
+export = { getColumnNames, getColumnType };
