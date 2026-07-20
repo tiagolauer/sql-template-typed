@@ -35,6 +35,13 @@ interface SqliteTableInfoRow {
   name: string;
   type: string;
   notnull: number;
+  pk: number;
+}
+
+function isRowidAlias(column: SqliteTableInfoRow, primaryKeyCount: number): boolean {
+  return (
+    column.pk > 0 && primaryKeyCount === 1 && column.type.toUpperCase().trim() === 'INTEGER'
+  );
 }
 
 export async function introspectSqlite(connection: ConnectionInfo): Promise<TableSchema[]> {
@@ -63,12 +70,14 @@ export async function introspectSqlite(connection: ConnectionInfo): Promise<Tabl
         .prepare(`PRAGMA table_info(${quoteIdentifier(tableRow.name)})`)
         .all() as unknown as SqliteTableInfoRow[];
 
+      const primaryKeyCount = columns.filter((column) => column.pk > 0).length;
+
       return {
         name: tableRow.name,
         columns: columns.map((column) => ({
           name: column.name,
           tsType: mapSqliteType(column.type),
-          nullable: column.notnull === 0,
+          nullable: column.notnull === 0 && !isRowidAlias(column, primaryKeyCount),
         })),
       };
     });

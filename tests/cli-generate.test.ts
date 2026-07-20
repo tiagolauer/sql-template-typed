@@ -44,7 +44,7 @@ describe('runGenerate (end to end against a real sqlite file)', () => {
       expect(written).toBe(
         'export interface DB {\n' +
           '  users: {\n' +
-          '    id: number | null;\n' +
+          '    id: number;\n' +
           '    name: string;\n' +
           '    bio: string | null;\n' +
           '  };\n' +

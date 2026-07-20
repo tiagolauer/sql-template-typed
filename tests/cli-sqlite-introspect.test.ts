@@ -33,11 +33,29 @@ describe('introspectSqlite', () => {
       expect(tables).toHaveLength(1);
       expect(tables[0]?.name).toBe('users');
       expect(tables[0]?.columns).toEqual([
-        { name: 'id', tsType: 'number', nullable: true },
+        { name: 'id', tsType: 'number', nullable: false },
         { name: 'name', tsType: 'string', nullable: false },
         { name: 'bio', tsType: 'string', nullable: true },
         { name: 'active', tsType: '0 | 1', nullable: false },
       ]);
+    } finally {
+      rmSync(join(file, '..'), { recursive: true, force: true });
+    }
+  });
+
+  it('keeps composite and non-INTEGER primary keys nullable-aware', async () => {
+    const file = withTempDatabase((db) => {
+      db.exec('create table pairs (a integer, b integer, primary key (a, b))');
+      db.exec('create table codes (code text primary key)');
+    });
+
+    try {
+      const tables = await introspectSqlite({ url: file });
+      const pairs = tables.find((table) => table.name === 'pairs');
+      const codes = tables.find((table) => table.name === 'codes');
+
+      expect(pairs?.columns.map((column) => column.nullable)).toEqual([true, true]);
+      expect(codes?.columns[0]?.nullable).toBe(true);
     } finally {
       rmSync(join(file, '..'), { recursive: true, force: true });
     }
