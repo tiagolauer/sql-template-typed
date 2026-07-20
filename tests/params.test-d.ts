@@ -45,8 +45,16 @@ type JoinQualifiedParam = Expect<
   >
 >;
 
-type InsertParamsAreFlexible = Expect<
-  Equal<Params<DB, 'insert into users (name) values ($1)'>, unknown[]>
+type InsertValuesParamsMatchColumnList = Expect<
+  Equal<Params<DB, 'insert into users (name) values ($1)'>, [string]>
+>;
+
+type InsertValuesParamsMatchMultipleColumns = Expect<
+  Equal<Params<DB, 'insert into users (name, active) values ($1, $2)'>, [string, boolean]>
+>;
+
+type InsertWithoutColumnListIsFlexible = Expect<
+  Equal<Params<DB, 'insert into users values ($1, $2, $3)'>, unknown[]>
 >;
 
 declare const db: ReturnType<typeof createTypedDb<DB>>;
@@ -72,5 +80,7 @@ export type ParamLock = [
   UpdateParams,
   DeleteParams,
   JoinQualifiedParam,
-  InsertParamsAreFlexible,
+  InsertValuesParamsMatchColumnList,
+  InsertValuesParamsMatchMultipleColumns,
+  InsertWithoutColumnListIsFlexible,
 ];

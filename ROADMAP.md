@@ -37,9 +37,12 @@ first-timer-sized, but open if you want to dig in:
   but surfaced as a `tsserver` diagnostic instead of a type), and `JOIN`/
   alias-aware completions (right now only the first `FROM <table>` is used
   to scope suggestions).
-- **Typed params inside `INSERT ... VALUES`** and **inside a `WITH` CTE's
-  own body** — both currently fall back to `unknown[]`/untyped, documented
-  as known gaps in [README limitations](README.md#limitations).
+- **Typed params inside a `WITH` CTE's own subquery body** — a placeholder
+  written inside a CTE's own definition still can't be typed; the whole
+  query falls back to `unknown[]` rather than mistyping it. (`INSERT ...
+  VALUES` params against an explicit column list, and params in a query's
+  outer `SELECT` referencing a CTE by name, are both typed now — see
+  [README limitations](README.md#limitations).)
 - **Nested `CASE`** — the parser currently finds the first top-level `END`
   only.
 - **`ts-plugin` on TypeScript 7+** — TS 7's native (Go) compiler dropped the

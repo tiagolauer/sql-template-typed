@@ -1,4 +1,4 @@
-import type { Query, StrictQuery, QueryTypeError } from '../src/index.js';
+import type { Query, StrictQuery, QueryTypeError, Params } from '../src/index.js';
 
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2)
@@ -74,6 +74,30 @@ type CteMultiColumnListAlsoResolvesByName = Expect<
   >
 >;
 
+type ParamAfterCteResolvesAgainstCteShape = Expect<
+  Equal<
+    Params<DB, 'with popular as (select id, views from posts) select id from popular where views > $1'>,
+    [number]
+  >
+>;
+
+type ParamAfterMultipleCtesStillResolves = Expect<
+  Equal<
+    Params<
+      DB,
+      'with popular as (select id, title, views from posts), popular_titles as (select title from popular) select title from popular_titles where title = $1'
+    >,
+    [string]
+  >
+>;
+
+type ParamInsideCteBodyFallsBackSafelyInsteadOfClaimingZeroParams = Expect<
+  Equal<
+    Params<DB, 'with popular as (select id from posts where views > $1) select id from popular'>,
+    unknown[]
+  >
+>;
+
 export type CteLock = [
   SimpleCte,
   CteWithJoinAgainstRealTable,
@@ -83,4 +107,7 @@ export type CteLock = [
   WithRecursiveResolvesInStrictModeToo,
   CteColumnListDoesNotBreakTheCteName,
   CteMultiColumnListAlsoResolvesByName,
+  ParamAfterCteResolvesAgainstCteShape,
+  ParamAfterMultipleCtesStillResolves,
+  ParamInsideCteBodyFallsBackSafelyInsteadOfClaimingZeroParams,
 ];

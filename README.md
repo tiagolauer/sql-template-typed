@@ -746,10 +746,15 @@ This is a focused tool for the common read path, not a full SQL grammar:
   column name (e.g. both have `id`), the types are intersected rather than kept
   separate. Alias the columns to keep them distinct.
 - **Typed parameters need spaced operators.** `where id = $1` is typed;
-  `where id=$1` is not. Parameters inside `INSERT ... VALUES` are not typed
-  (they fall back to a flexible `unknown[]`), and parameters inside a `WITH`
-  query's own CTE bodies are not typed either. Numbered placeholders are
-  assumed to appear in ascending order (`$1`, `$2`, ...).
+  `where id=$1` is not. `INSERT ... VALUES` parameters are matched
+  positionally against the INSERT's column list — `insert into t (a, b)
+  values ($1, $2)` types `$1`/`$2` as `a`/`b`; without an explicit column
+  list they fall back to a flexible `unknown[]`. A query's own `WITH` CTE
+  bodies can't have their placeholders typed, and if one contains a
+  parameter the whole query falls back to `unknown[]` rather than silently
+  dropping that parameter — placeholders in the outer query (referencing a
+  CTE by name) are unaffected either way. Numbered placeholders are assumed
+  to appear in ascending order (`$1`, `$2`, ...).
 - **Quoted identifiers** use `"..."` (standard), `[...]` (SQL Server), or
   `` `...` `` (MySQL — escape the backtick with `\`` inside the template
   literal). Schema-qualified tables (`public.users`) resolve by their final

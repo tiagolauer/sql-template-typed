@@ -65,7 +65,7 @@ type ColumnsBeforeFrom<
       : { columns: Trim<Accumulated extends '' ? S : `${Accumulated} ${S}`>; afterFrom: null }
     : { columns: Trim<Accumulated extends '' ? S : `${Accumulated} ${S}`>; afterFrom: null };
 
-type AfterKeyword<S extends string, Keyword extends string> =
+export type AfterKeyword<S extends string, Keyword extends string> =
   S extends `${infer Head} ${infer Tail}`
     ? IsKeyword<Head, Keyword> extends true
       ? Tail
@@ -174,7 +174,7 @@ type ScanColumnList<
         : ScanColumnList<Rest, Depth, `${Current}${Char}`>
   : [Trim<Current>];
 
-type SplitColumnList<S extends string> = ScanColumnList<S, [], ''>;
+export type SplitColumnList<S extends string> = ScanColumnList<S, [], ''>;
 
 type OutputName<Expression extends string> = IsFunctionCall<Expression> extends true
   ? FunctionOutputName<Expression>
@@ -473,7 +473,7 @@ type IsSelectAll<Columns extends string> = Trim<Columns> extends '*' ? true : fa
 
 type EmptyRow = Record<string, never>;
 
-type ResolveCteContext<
+export type ResolveCteContext<
   DB extends SchemaLike,
   Q extends string,
   Strict extends boolean,
