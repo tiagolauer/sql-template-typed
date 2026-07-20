@@ -62,8 +62,8 @@ type ColumnsBeforeFrom<
   : Depth extends []
     ? IsKeyword<S, 'from'> extends true
       ? { columns: Trim<Accumulated>; afterFrom: '' }
-      : never
-    : never;
+      : { columns: Trim<Accumulated extends '' ? S : `${Accumulated} ${S}`>; afterFrom: null }
+    : { columns: Trim<Accumulated extends '' ? S : `${Accumulated} ${S}`>; afterFrom: null };
 
 type AfterKeyword<S extends string, Keyword extends string> =
   S extends `${infer Head} ${infer Tail}`
@@ -131,9 +131,11 @@ type ParseSelectBody<S extends string> = StatementAfterSelect<S> extends infer B
   ? Body extends string
     ? ColumnsBeforeFrom<StripTopClause<Body>> extends {
         columns: infer Columns extends string;
-        afterFrom: infer AfterFrom extends string;
+        afterFrom: infer AfterFrom;
       }
-      ? { columns: Columns; sources: ParseFromClause<AfterFrom> }
+      ? AfterFrom extends string
+        ? { columns: Columns; sources: ParseFromClause<AfterFrom> }
+        : { columns: Columns; sources: [] }
       : never
     : never
   : never;
@@ -299,9 +301,11 @@ type BareColumnType<
 > = ResolveBareAcross<DB, Sources, Column> extends infer Type
   ? [Type] extends [never]
     ? Strict extends true
-      ? AnyKnownTable<DB, Sources> extends true
-        ? QueryTypeError<`unknown column: ${Column}`>
-        : QueryTypeError<`unknown table: ${FirstSourceTable<Sources>}`>
+      ? Sources extends []
+        ? QueryTypeError<`no FROM clause: cannot resolve column "${Column}"`>
+        : AnyKnownTable<DB, Sources> extends true
+          ? QueryTypeError<`unknown column: ${Column}`>
+          : QueryTypeError<`unknown table: ${FirstSourceTable<Sources>}`>
       : unknown
     : Type
   : never;
