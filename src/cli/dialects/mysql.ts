@@ -49,12 +49,11 @@ export function mapMysqlType(dataType: string, columnType: string): string {
   return MYSQL_SCALAR_TYPES[type] ?? 'unknown';
 }
 
-interface MysqlColumnRow {
-  table_name: string;
-  column_name: string;
-  data_type: string;
-  column_type: string;
-  is_nullable: 'YES' | 'NO';
+type MysqlColumnRow = Record<string, unknown>;
+
+function readField(row: MysqlColumnRow, name: string): string {
+  const value = row[name] ?? row[name.toUpperCase()];
+  return typeof value === 'string' ? value : '';
 }
 
 export async function introspectMysql(connection: ConnectionInfo): Promise<TableSchema[]> {
@@ -72,34 +71,37 @@ export async function introspectMysql(connection: ConnectionInfo): Promise<Table
   try {
     const [rows] = await connectionHandle.query(
       connection.schema
-        ? `select table_name, column_name, data_type, column_type, is_nullable
+        ? `select table_name as table_name, column_name as column_name, data_type as data_type,
+                  column_type as column_type, is_nullable as is_nullable
            from information_schema.columns
            where table_schema = ?
            order by table_name, ordinal_position`
-        : `select table_name, column_name, data_type, column_type, is_nullable
+        : `select table_name as table_name, column_name as column_name, data_type as data_type,
+                  column_type as column_type, is_nullable as is_nullable
            from information_schema.columns
            where table_schema = database()
            order by table_name, ordinal_position`,
       connection.schema ? [connection.schema] : [],
     );
 
-    return groupColumns(rows as unknown as MysqlColumnRow[]);
+    return groupMysqlColumns(rows as unknown as MysqlColumnRow[]);
   } finally {
     await connectionHandle.end();
   }
 }
 
-function groupColumns(rows: MysqlColumnRow[]): TableSchema[] {
+export function groupMysqlColumns(rows: MysqlColumnRow[]): TableSchema[] {
   const tables = new Map<string, TableSchema>();
 
   for (const row of rows) {
-    const table = tables.get(row.table_name) ?? { name: row.table_name, columns: [] };
+    const tableName = readField(row, 'table_name');
+    const table = tables.get(tableName) ?? { name: tableName, columns: [] };
     table.columns.push({
-      name: row.column_name,
-      tsType: mapMysqlType(row.data_type, row.column_type),
-      nullable: row.is_nullable === 'YES',
+      name: readField(row, 'column_name'),
+      tsType: mapMysqlType(readField(row, 'data_type'), readField(row, 'column_type')),
+      nullable: readField(row, 'is_nullable') === 'YES',
     });
-    tables.set(row.table_name, table);
+    tables.set(tableName, table);
   }
 
   return [...tables.values()];
