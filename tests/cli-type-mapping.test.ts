@@ -45,9 +45,9 @@ describe('mapMysqlType', () => {
     expect(mapMysqlType('smallint', 'smallint(6)')).toBe('number');
   });
 
-  it('maps decimal and bigint to string to avoid precision loss', () => {
+  it('maps decimal to string but bigint to number, matching mysql2 defaults', () => {
     expect(mapMysqlType('decimal', 'decimal(10,2)')).toBe('string');
-    expect(mapMysqlType('bigint', 'bigint(20)')).toBe('string');
+    expect(mapMysqlType('bigint', 'bigint(20)')).toBe('number');
   });
 
   it('maps tinyint(1) to boolean but other tinyint widths to number', () => {
@@ -90,10 +90,12 @@ describe('mapMssqlType', () => {
     expect(mapMssqlType('real')).toBe('number');
   });
 
-  it('maps bigint, decimal, numeric, and money to string', () => {
+  it('maps bigint to string but decimal, numeric and money to number, matching tedious defaults', () => {
     expect(mapMssqlType('bigint')).toBe('string');
-    expect(mapMssqlType('decimal')).toBe('string');
-    expect(mapMssqlType('money')).toBe('string');
+    expect(mapMssqlType('decimal')).toBe('number');
+    expect(mapMssqlType('numeric')).toBe('number');
+    expect(mapMssqlType('money')).toBe('number');
+    expect(mapMssqlType('smallmoney')).toBe('number');
   });
 
   it('maps bit to boolean and binary types to Buffer', () => {

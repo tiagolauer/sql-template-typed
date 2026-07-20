@@ -26,7 +26,7 @@ describe('groupMysqlColumns', () => {
       {
         name: 'users',
         columns: [
-          { name: 'id', tsType: 'string', nullable: false },
+          { name: 'id', tsType: 'number', nullable: false },
           { name: 'active', tsType: 'boolean', nullable: true },
         ],
       },

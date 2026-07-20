@@ -9,7 +9,7 @@ const MYSQL_SCALAR_TYPES: Record<string, string> = {
   year: 'number',
   float: 'number',
   double: 'number',
-  bigint: 'string',
+  bigint: 'number',
   decimal: 'string',
   numeric: 'string',
   char: 'string',

@@ -211,12 +211,14 @@ commit it, edit it by hand afterward, rename fields, anything. Running
 `mysql2`, or `mssql` — SQLite uses the `node:sqlite` builtin, Node ≥22.5). It
 prints a clear error telling you which one to install if it's missing.
 
-**Type mapping is conservative on purpose.** Types where the default driver
-behavior can lose precision — `bigint`, `numeric`/`decimal`, `money` — are
-generated as `string`, not `number`, because that's what `pg`/`mysql2` (and,
-assumed by analogy, `mssql`) actually hand back by default. If your driver is
-configured differently (e.g. mysql2's `supportBigNumbers`), just edit the
-generated field by hand; it's a plain type after that point.
+**Type mapping follows each driver's defaults.** `pg` hands back `bigint`,
+`numeric`/`decimal` and `money` as `string`; `mysql2` returns `decimal` as
+`string` but `bigint` as a JS `number` (unless you enable
+`supportBigNumbers`/`bigNumberStrings`); `mssql` (tedious) returns `bigint` as
+`string` but parses `decimal`/`numeric`/`money` into JS `number` (with
+precision loss beyond 2^53). The generated types mirror exactly that. If your
+driver is configured differently, just edit the generated field by hand; it's
+a plain type after that point.
 
 ### 2. Create a typed client
 
