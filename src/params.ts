@@ -42,11 +42,67 @@ type CleanPlaceholderToken<S extends string> = StripTrailingListPunctuation<Stri
 
 type IsPlaceholder<Token extends string> = CleanPlaceholderToken<Token> extends '?'
   ? true
-  : CleanPlaceholderToken<Token> extends `$${string}`
-    ? true
-    : CleanPlaceholderToken<Token> extends `@${string}`
+  : CleanPlaceholderToken<Token> extends `$$${string}` | `@@${string}` | '$' | '@'
+    ? false
+    : CleanPlaceholderToken<Token> extends `$${string}`
       ? true
-      : false;
+      : CleanPlaceholderToken<Token> extends `@${string}`
+        ? true
+        : false;
+
+type Digit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
+
+interface DigitCounters {
+  '0': [];
+  '1': [unknown];
+  '2': [unknown, unknown];
+  '3': [unknown, unknown, unknown];
+  '4': [unknown, unknown, unknown, unknown];
+  '5': [unknown, unknown, unknown, unknown, unknown];
+  '6': [unknown, unknown, unknown, unknown, unknown, unknown];
+  '7': [unknown, unknown, unknown, unknown, unknown, unknown, unknown];
+  '8': [unknown, unknown, unknown, unknown, unknown, unknown, unknown, unknown];
+  '9': [unknown, unknown, unknown, unknown, unknown, unknown, unknown, unknown, unknown];
+}
+
+type TimesTen<Counter extends unknown[]> = [
+  ...Counter,
+  ...Counter,
+  ...Counter,
+  ...Counter,
+  ...Counter,
+  ...Counter,
+  ...Counter,
+  ...Counter,
+  ...Counter,
+  ...Counter,
+];
+
+type DigitsToCounter<S extends string, Accumulated extends unknown[] = []> =
+  S extends `${infer Head}${infer Rest}`
+    ? Head extends Digit
+      ? DigitsToCounter<Rest, [...TimesTen<Accumulated>, ...DigitCounters[Head & keyof DigitCounters]]>
+      : never
+    : Accumulated;
+
+type PlaceholderPosition<Token extends string> =
+  CleanPlaceholderToken<Token> extends `$${infer Digits}`
+    ? DigitsToCounter<Digits> extends [unknown, ...infer Position extends unknown[]]
+      ? Position
+      : never
+    : never;
+
+type SetSlot<
+  Tuple extends unknown[],
+  Position extends unknown[],
+  Type,
+> = Position extends [unknown, ...infer PositionRest extends unknown[]]
+  ? Tuple extends [infer Head, ...infer TupleRest extends unknown[]]
+    ? [Head, ...SetSlot<TupleRest, PositionRest, Type>]
+    : [unknown, ...SetSlot<[], PositionRest, Type>]
+  : Tuple extends [infer Head, ...infer TupleRest extends unknown[]]
+    ? [Head & Type, ...TupleRest]
+    : [Type];
 
 type ParamType<
   DB extends SchemaLike,
@@ -59,31 +115,48 @@ type ParamType<
     ? ResolveColumnLoose<DB, Sources, Column>
     : unknown;
 
+type AddParam<
+  Token extends string,
+  Type,
+  Indexed extends unknown[],
+  Sequential extends unknown[],
+> = PlaceholderPosition<Token> extends infer Position
+  ? [Position] extends [never]
+    ? { indexed: Indexed; sequential: [...Sequential, Type] }
+    : Position extends unknown[]
+      ? { indexed: SetSlot<Indexed, Position, Type>; sequential: Sequential }
+      : never
+  : never;
+
 type ScanParams<
   S extends string,
   DB extends SchemaLike,
   Sources extends Source[],
   PrevPrev extends string = '',
   Prev extends string = '',
-  Accumulated extends unknown[] = [],
+  Indexed extends unknown[] = [],
+  Sequential extends unknown[] = [],
 > = S extends `${infer Head} ${infer Tail}`
   ? IsPlaceholder<Head> extends true
-    ? ScanParams<
-        Tail,
-        DB,
-        Sources,
-        PrevPrev,
-        Prev,
-        [...Accumulated, ParamType<DB, Sources, PrevPrev, Prev>]
-      >
+    ? AddParam<Head, ParamType<DB, Sources, PrevPrev, Prev>, Indexed, Sequential> extends {
+        indexed: infer NextIndexed extends unknown[];
+        sequential: infer NextSequential extends unknown[];
+      }
+      ? ScanParams<Tail, DB, Sources, PrevPrev, Prev, NextIndexed, NextSequential>
+      : never
     : IsTransparentToken<Head> extends true
-      ? ScanParams<Tail, DB, Sources, PrevPrev, Prev, Accumulated>
-      : ScanParams<Tail, DB, Sources, Prev, Head, Accumulated>
+      ? ScanParams<Tail, DB, Sources, PrevPrev, Prev, Indexed, Sequential>
+      : ScanParams<Tail, DB, Sources, Prev, Head, Indexed, Sequential>
   : S extends ''
-    ? Accumulated
+    ? [...Indexed, ...Sequential]
     : IsPlaceholder<S> extends true
-      ? [...Accumulated, ParamType<DB, Sources, PrevPrev, Prev>]
-      : Accumulated;
+      ? AddParam<S, ParamType<DB, Sources, PrevPrev, Prev>, Indexed, Sequential> extends {
+          indexed: infer NextIndexed extends unknown[];
+          sequential: infer NextSequential extends unknown[];
+        }
+        ? [...NextIndexed, ...NextSequential]
+        : never
+      : [...Indexed, ...Sequential];
 
 type InsertColumnList<S extends string> = AfterKeyword<S, 'into'> extends infer AfterInto extends string
   ? Trim<DropFirstWord<AfterInto>> extends `(${infer AfterOpen}`
@@ -113,13 +186,20 @@ type MatchInsertValueTypes<
   Table extends string,
   Columns extends string[],
   Values extends string[],
+  Indexed extends unknown[] = [],
+  Sequential extends unknown[] = [],
 > = Values extends [infer Head extends string, ...infer ValuesTail extends string[]]
   ? Columns extends [infer ColumnHead extends string, ...infer ColumnsTail extends string[]]
     ? IsPlaceholder<Trim<Head>> extends true
-      ? [ColumnTypeAt<DB, Table, ColumnHead>, ...MatchInsertValueTypes<DB, Table, ColumnsTail, ValuesTail>]
-      : MatchInsertValueTypes<DB, Table, ColumnsTail, ValuesTail>
-    : []
-  : [];
+      ? AddParam<Trim<Head>, ColumnTypeAt<DB, Table, ColumnHead>, Indexed, Sequential> extends {
+          indexed: infer NextIndexed extends unknown[];
+          sequential: infer NextSequential extends unknown[];
+        }
+        ? MatchInsertValueTypes<DB, Table, ColumnsTail, ValuesTail, NextIndexed, NextSequential>
+        : never
+      : MatchInsertValueTypes<DB, Table, ColumnsTail, ValuesTail, Indexed, Sequential>
+    : [...Indexed, ...Sequential]
+  : [...Indexed, ...Sequential];
 
 type InsertParamTypes<DB extends SchemaLike, Q extends string> = ParseStatement<Q> extends {
   sources: [infer Src extends Source];
