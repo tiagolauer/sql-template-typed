@@ -31,17 +31,51 @@ type SkipLiteralBody<S extends string> = S extends `${string}'${infer After}`
     : { rest: After }
   : never;
 
-export type MaskStringLiterals<
+type AfterLineComment<S extends string> = S extends `${string}
+${infer Rest}`
+  ? Rest
+  : '';
+
+type AfterBlockComment<S extends string> = S extends `${string}*/${infer Rest}` ? Rest : '';
+
+export type StripCommentsAndMaskLiterals<
   S extends string,
   Accumulated extends string = '',
-> = S extends `${infer Before}'${infer After}`
-  ? SkipLiteralBody<After> extends { rest: infer Rest extends string }
-    ? MaskStringLiterals<Rest, `${Accumulated}${Before}''`>
-    : `${Accumulated}${S}`
-  : `${Accumulated}${S}`;
+> = S extends `${infer BeforeQuote}'${infer AfterQuote}`
+  ? BeforeQuote extends `${infer BeforeDash}--${infer AfterDash}`
+    ? BeforeDash extends `${infer BeforeBlock}/*${infer AfterBlock}`
+      ? StripCommentsAndMaskLiterals<
+          AfterBlockComment<`${AfterBlock}--${AfterDash}'${AfterQuote}`>,
+          `${Accumulated}${BeforeBlock} `
+        >
+      : StripCommentsAndMaskLiterals<
+          AfterLineComment<`${AfterDash}'${AfterQuote}`>,
+          `${Accumulated}${BeforeDash} `
+        >
+    : BeforeQuote extends `${infer BeforeBlock}/*${infer AfterBlock}`
+      ? StripCommentsAndMaskLiterals<
+          AfterBlockComment<`${AfterBlock}'${AfterQuote}`>,
+          `${Accumulated}${BeforeBlock} `
+        >
+      : SkipLiteralBody<AfterQuote> extends { rest: infer Rest extends string }
+        ? StripCommentsAndMaskLiterals<Rest, `${Accumulated}${BeforeQuote}''`>
+        : `${Accumulated}${S}`
+  : S extends `${infer BeforeDash}--${infer AfterDash}`
+    ? BeforeDash extends `${infer BeforeBlock}/*${infer AfterBlock}`
+      ? StripCommentsAndMaskLiterals<
+          AfterBlockComment<`${AfterBlock}--${AfterDash}`>,
+          `${Accumulated}${BeforeBlock} `
+        >
+      : StripCommentsAndMaskLiterals<AfterLineComment<AfterDash>, `${Accumulated}${BeforeDash} `>
+    : S extends `${infer BeforeBlock}/*${infer AfterBlock}`
+      ? StripCommentsAndMaskLiterals<
+          AfterBlockComment<AfterBlock>,
+          `${Accumulated}${BeforeBlock} `
+        >
+      : `${Accumulated}${S}`;
 
 export type Normalize<S extends string> = Trim<
-  CollapseSpaces<WhitespaceToSpace<RemoveSemicolons<MaskStringLiterals<S>>>>
+  CollapseSpaces<WhitespaceToSpace<RemoveSemicolons<StripCommentsAndMaskLiterals<S>>>>
 >;
 
 export type Unquote<S extends string> = S extends `"${infer Inner}"`
