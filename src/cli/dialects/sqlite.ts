@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import type { ConnectionInfo, TableSchema } from '../types.js';
 
 export function mapSqliteType(declaredType: string): string {
@@ -44,6 +45,10 @@ export async function introspectSqlite(connection: ConnectionInfo): Promise<Tabl
     throw new Error(
       "'node:sqlite' is not available in this Node.js version. Upgrade to Node >=22.5, or use better-sqlite3 and edit the generated schema by hand.",
     );
+  }
+
+  if (connection.url !== ':memory:' && !existsSync(connection.url)) {
+    throw new Error(`SQLite database file not found: "${connection.url}".`);
   }
 
   const db = new DatabaseSyncCtor(connection.url);

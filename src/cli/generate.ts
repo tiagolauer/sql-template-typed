@@ -13,6 +13,8 @@ export interface GenerateOptions {
   schema?: string | undefined;
 }
 
+const SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
+
 export function detectDialect(url: string): Dialect {
   if (url.startsWith('postgres://') || url.startsWith('postgresql://')) {
     return 'postgres';
@@ -24,6 +26,12 @@ export function detectDialect(url: string): Dialect {
 
   if (url.startsWith('mssql://') || url.startsWith('sqlserver://')) {
     return 'mssql';
+  }
+
+  if (SCHEME_PATTERN.test(url)) {
+    throw new Error(
+      `Unrecognized connection URL "${url}". Expected postgres://, postgresql://, mysql://, mssql://, sqlserver://, or a path to a SQLite database file.`,
+    );
   }
 
   return 'sqlite';
