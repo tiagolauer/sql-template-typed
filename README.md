@@ -735,10 +735,13 @@ this.**
 
 This is a focused tool for the common read path, not a full SQL grammar:
 
-- **Scalar subqueries are not typed.** A subquery used as a value inside the
-  `SELECT` list or `WHERE` (`select (select count(*) from posts) from users`)
-  resolves to `unknown`. Only `WITH` CTEs and derived tables in `FROM` are
-  parsed.
+- **Scalar subqueries in the `SELECT` list are typed for the simple case** —
+  a single-column, non-nested subquery (`select (select count(*) from posts
+  where posts.user_id = users.id) as post_count from users`) resolves to
+  that column's type. A subquery selecting more than one column resolves to
+  `unknown` rather than picking one arbitrarily. Subqueries used as a value
+  inside `WHERE` are not typed at all (`WHERE` isn't part of the typed
+  structure — only scanned for parameter placeholders).
 - **`CASE` does not support nested `CASE`.** The parser looks for the first
   top-level `END`; a `CASE` nested inside another `CASE`'s branch is not
   supported.

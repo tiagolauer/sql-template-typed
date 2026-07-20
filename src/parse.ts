@@ -359,6 +359,32 @@ type QualifiedColumnType<
       : never
   : never;
 
+type ScalarSubqueryInner<Expression extends string> = Trim<Expression> extends `(${infer AfterOpen}`
+  ? ExtractParenGroup<AfterOpen> extends { inner: infer Inner extends string; rest: infer Rest extends string }
+    ? Trim<Rest> extends ''
+      ? IsKeyword<FirstWord<Trim<Inner>>, 'select'> extends true
+        ? Trim<Inner>
+        : never
+      : never
+    : never
+  : never;
+
+type IsUnion<T, U = T> = T extends U ? ([U] extends [T] ? false : true) : never;
+
+type ScalarSubqueryType<
+  DB extends SchemaLike,
+  Q extends string,
+  Strict extends boolean,
+> = InferRowWith<DB, Q, Strict> extends infer Row
+  ? [Row] extends [never]
+    ? unknown
+    : Row extends QueryTypeError<string>
+      ? Row
+      : IsUnion<keyof Row> extends true
+        ? unknown
+        : Row[keyof Row]
+  : unknown;
+
 export type ResolveColumnType<
   DB extends SchemaLike,
   Sources extends Source[],
@@ -368,17 +394,19 @@ export type ResolveColumnType<
   ? SplitCaseExpression<Expression> extends { body: infer Body extends string }
     ? CaseExpressionType<DB, Sources, Body, Strict>
     : unknown
-  : IsFunctionCall<Expression> extends true
-    ? FunctionReturnType<Expression>
-    : Qualifier<Expression> extends ''
-      ? BareColumnType<DB, Sources, Unquote<StripQualifier<Expression>>, Strict>
-      : QualifiedColumnType<
-          DB,
-          Sources,
-          Unquote<Qualifier<Expression>>,
-          Unquote<StripQualifier<Expression>>,
-          Strict
-        >;
+  : [ScalarSubqueryInner<Expression>] extends [never]
+    ? IsFunctionCall<Expression> extends true
+      ? FunctionReturnType<Expression>
+      : Qualifier<Expression> extends ''
+        ? BareColumnType<DB, Sources, Unquote<StripQualifier<Expression>>, Strict>
+        : QualifiedColumnType<
+            DB,
+            Sources,
+            Unquote<Qualifier<Expression>>,
+            Unquote<StripQualifier<Expression>>,
+            Strict
+          >
+    : ScalarSubqueryType<DB, ScalarSubqueryInner<Expression>, Strict>;
 
 export type ResolveColumnLoose<
   DB extends SchemaLike,

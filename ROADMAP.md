@@ -28,10 +28,11 @@ the editor tooling, not a promise of dates.
 Bigger pieces that need real parser or compiler-API design work — not
 first-timer-sized, but open if you want to dig in:
 
-- **Scalar subqueries in `SELECT`/`WHERE`** (currently resolve to `unknown`
-  by design — see [Limitations](README.md#limitations)). Needs the same
-  balanced-paren extraction used for CTEs/derived tables, applied at an
-  arbitrary expression position instead of only in `FROM`.
+- **Scalar subqueries in `WHERE`** (still resolve to `unknown` — `WHERE`
+  isn't part of the typed structure at all right now, only scanned for
+  parameter placeholders). Single-column `SELECT`-list scalar subqueries are
+  typed now — see [README limitations](README.md#limitations). Multi-column
+  `SELECT`-list subqueries still resolve to `unknown` too, by design.
 - **`ts-plugin` v2**: inline diagnostics for unknown columns/tables (reusing
   strict-mode's `QueryTypeError` logic but surfaced as a `tsserver`
   diagnostic instead of a type), and `JOIN`/alias-aware completions and
