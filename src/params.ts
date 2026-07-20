@@ -5,6 +5,7 @@ import type {
   ParseStatement,
   ResolveColumnLoose,
   ResolveCteContext,
+  ResolveKey,
   AfterKeyword,
   SplitColumnList,
 } from './parse.js';
@@ -172,11 +173,16 @@ type InsertColumnList<S extends string> = AfterKeyword<S, 'into'> extends infer 
     : never
   : never;
 
-type ColumnTypeAt<DB extends SchemaLike, Table extends string, Column extends string> =
-  Table extends keyof DB
-    ? Column extends keyof DB[Table]
-      ? DB[Table][Column]
-      : unknown
+type ColumnTypeAt<DB extends SchemaLike, Table extends string, Column extends string> = [
+  ResolveKey<DB, Table>,
+] extends [never]
+  ? unknown
+  : ResolveKey<DB, Table> extends infer TableKey extends keyof DB
+    ? [ResolveKey<DB[TableKey], Column>] extends [never]
+      ? unknown
+      : ResolveKey<DB[TableKey], Column> extends infer ColumnKey extends keyof DB[TableKey]
+        ? DB[TableKey][ColumnKey]
+        : unknown
     : unknown;
 
 type MatchInsertValues<

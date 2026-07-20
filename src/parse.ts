@@ -30,6 +30,18 @@ export type QueryTypeError<Message extends string> = {
   readonly __sqlTypeError: Message;
 };
 
+type CaseInsensitiveKey<T, Name extends string> = {
+  [Key in keyof T]: Key extends string
+    ? Lowercase<Key> extends Lowercase<Name>
+      ? Key
+      : never
+    : never;
+}[keyof T];
+
+export type ResolveKey<T, Name extends string> = Name extends keyof T
+  ? Name
+  : CaseInsensitiveKey<T, Name>;
+
 type StatementAfterSelect<S extends string> = S extends `${infer Keyword} ${infer Rest}`
   ? IsKeyword<Keyword, 'select'> extends true
     ? Rest
@@ -297,10 +309,18 @@ type SourceColumnType<
   DB extends SchemaLike,
   S extends Source,
   Column extends string,
-> = S['table'] extends keyof DB
-  ? Column extends keyof DB[S['table']]
-    ? ApplyNull<DB[S['table']][Column], S['nullable']>
-    : never
+> = ResolveKey<DB, S['table']> extends infer TableKey
+  ? [TableKey] extends [never]
+    ? never
+    : TableKey extends keyof DB
+      ? ResolveKey<DB[TableKey], Column> extends infer ColumnKey
+        ? [ColumnKey] extends [never]
+          ? never
+          : ColumnKey extends keyof DB[TableKey]
+            ? ApplyNull<DB[TableKey][ColumnKey], S['nullable']>
+            : never
+        : never
+      : never
   : never;
 
 type ResolveBareAcross<
@@ -317,16 +337,16 @@ type ResolveBareAcross<
 
 type AnyKnownTable<DB extends SchemaLike, Sources extends Source[]> =
   Sources extends [infer Head extends Source, ...infer Tail extends Source[]]
-    ? Head['table'] extends keyof DB
-      ? true
-      : AnyKnownTable<DB, Tail>
+    ? [ResolveKey<DB, Head['table']>] extends [never]
+      ? AnyKnownTable<DB, Tail>
+      : true
     : false;
 
 type FirstUnknownTable<DB extends SchemaLike, Sources extends Source[]> =
   Sources extends [infer Head extends Source, ...infer Tail extends Source[]]
-    ? Head['table'] extends keyof DB
-      ? FirstUnknownTable<DB, Tail>
-      : Head['table']
+    ? [ResolveKey<DB, Head['table']>] extends [never]
+      ? Head['table']
+      : FirstUnknownTable<DB, Tail>
     : '';
 
 type FirstSourceTable<Sources extends Source[]> = Sources extends [
@@ -374,15 +394,19 @@ type QualifiedColumnType<
       ? QueryTypeError<`unknown alias: ${Name}`>
       : unknown
     : Found extends Source
-      ? Found['table'] extends keyof DB
-        ? Column extends keyof DB[Found['table']]
-          ? ApplyNull<DB[Found['table']][Column], Found['nullable']>
-          : Strict extends true
-            ? QueryTypeError<`unknown column: ${Column}`>
-            : unknown
-        : Strict extends true
+      ? [ResolveKey<DB, Found['table']>] extends [never]
+        ? Strict extends true
           ? QueryTypeError<`unknown table: ${Found['table']}`>
           : unknown
+        : ResolveKey<DB, Found['table']> extends infer TableKey extends keyof DB
+          ? [ResolveKey<DB[TableKey], Column>] extends [never]
+            ? Strict extends true
+              ? QueryTypeError<`unknown column: ${Column}`>
+              : unknown
+            : ResolveKey<DB[TableKey], Column> extends infer ColumnKey extends keyof DB[TableKey]
+              ? ApplyNull<DB[TableKey][ColumnKey], Found['nullable']>
+              : never
+          : never
       : never
   : never;
 
@@ -476,9 +500,13 @@ type CollectRowErrors<Row> = {
 
 type SurfaceErrors<Row> = [CollectRowErrors<Row>] extends [never] ? Row : CollectRowErrors<Row>;
 
-type MergeSourceColumns<DB extends SchemaLike, S extends Source> = S['table'] extends keyof DB
-  ? { [Column in keyof DB[S['table']]]: ApplyNull<DB[S['table']][Column], S['nullable']> }
-  : unknown;
+type MergeSourceColumns<DB extends SchemaLike, S extends Source> = [
+  ResolveKey<DB, S['table']>,
+] extends [never]
+  ? unknown
+  : ResolveKey<DB, S['table']> extends infer TableKey extends keyof DB
+    ? { [Column in keyof DB[TableKey]]: ApplyNull<DB[TableKey][Column], S['nullable']> }
+    : unknown;
 
 type MergedStarColumns<DB extends SchemaLike, Sources extends Source[]> = Sources extends [
   infer Head extends Source,
@@ -493,9 +521,9 @@ type AllKnownTables<DB extends SchemaLike, Sources extends Source[]> = Sources e
   infer Head extends Source,
   ...infer Tail extends Source[],
 ]
-  ? Head['table'] extends keyof DB
-    ? AllKnownTables<DB, Tail>
-    : false
+  ? [ResolveKey<DB, Head['table']>] extends [never]
+    ? false
+    : AllKnownTables<DB, Tail>
   : true;
 
 type StarRow<
