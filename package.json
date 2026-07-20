@@ -1,6 +1,6 @@
 {
   "name": "@owlsql/core",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Parse SQL in TypeScript template literal types and infer the result shape from your schema — no codegen, no ORM.",
   "type": "module",
   "sideEffects": false,
