@@ -140,7 +140,11 @@ type ReturningOrOutputColumns<S extends string, StopKeyword extends string> = Re
   ? StripPseudoTableQualifiers<OutputClauseColumns<S, StopKeyword>>
   : ReturningColumns<S>;
 
-type SingleSource<Table extends string> = [{ table: Table; alias: Table; nullable: false }];
+type CleanTargetIdentifier<Raw extends string> = Unquote<StripQualifier<Raw>>;
+
+type SingleSource<Table extends string> = [
+  { table: CleanTargetIdentifier<Table>; alias: CleanTargetIdentifier<Table>; nullable: false },
+];
 
 export interface ParsedStatement {
   columns: string;
