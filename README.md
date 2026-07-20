@@ -719,7 +719,7 @@ this.**
 | Trailing semicolon | `select id from users;` |
 | Typed parameters | `where id = $1` → `query(sql, id: number)` |
 | Strict mode | `{ strict: true }` → unknown column becomes a `QueryTypeError` |
-| `WHERE` operators | `=`, `<>`, comparisons, `LIKE`/`ILIKE`, `IN (...)`, `BETWEEN ... AND ...`, `IS [NOT] NULL`, `AND`/`OR` |
+| `WHERE` operators | `=`, `<>`, comparisons, `LIKE`/`ILIKE`, `IN (...)`, `BETWEEN ... AND ...`, `IS [NOT] NULL`, `IS [NOT] DISTINCT FROM`, `AND`/`OR` |
 | `GROUP BY` / `HAVING` / `ORDER BY` / `LIMIT` / `OFFSET` | parsed and skipped; output shape follows the `SELECT` list, `HAVING`/`LIMIT`/`OFFSET` placeholders are typed |
 | `UNION` / `UNION ALL` | result shape is inferred from the first branch |
 | `CASE WHEN ... THEN ... [ELSE ...] END` | branch types are unioned (`\| null` added when there is no `ELSE`) |

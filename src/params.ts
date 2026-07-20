@@ -12,7 +12,7 @@ import type { ParseWithClause } from './cte.js';
 
 type Operator = '=' | '<>' | '!=' | '<' | '>' | '<=' | '>=';
 
-type WordOperator = 'like' | 'ilike' | 'in' | 'between';
+type WordOperator = 'like' | 'ilike' | 'in' | 'between' | 'distinct';
 
 type ForcedNumberKeyword = 'limit' | 'offset';
 
@@ -24,7 +24,7 @@ type IsOperator<Token extends string> = Token extends Operator
 
 type IsTransparentToken<Token extends string> = Token extends '(' | ')' | ','
   ? true
-  : Lowercase<Token> extends 'and' | 'or' | 'not'
+  : Lowercase<Token> extends 'and' | 'or' | 'not' | 'is' | 'from'
     ? true
     : false;
 

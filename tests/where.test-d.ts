@@ -9,6 +9,7 @@ type Expect<T extends true> = T;
 
 interface DB {
   users: { id: number; name: string; age: number; active: boolean; deleted_at: string | null };
+  orders: { id: number; user_id: number; price: number };
 }
 
 type LikeParam = Expect<
@@ -49,6 +50,37 @@ type IsNotNullDoesNotAffectArity = Expect<
   >
 >;
 
+type IsDistinctFromParam = Expect<
+  Equal<
+    Params<DB, 'select id from users where deleted_at is distinct from $1'>,
+    [string | null]
+  >
+>;
+
+type IsNotDistinctFromParam = Expect<
+  Equal<
+    Params<DB, 'select id from users where deleted_at is not distinct from $1'>,
+    [string | null]
+  >
+>;
+
+type IsDistinctFromCombinedWithAnotherCondition = Expect<
+  Equal<
+    Params<DB, 'select id from users where deleted_at is distinct from $1 and id = $2'>,
+    [string | null, number]
+  >
+>;
+
+type MakingFromTransparentDoesNotBreakJoinParams = Expect<
+  Equal<
+    Params<
+      DB,
+      'select u.name from users u join orders o on u.id = o.user_id where o.price > $1'
+    >,
+    [number]
+  >
+>;
+
 type MultipleAndConditions = Expect<
   Equal<
     Params<DB, 'select id from users where active = $1 and age > $2 and name = $3'>,
@@ -72,6 +104,10 @@ export type WhereLock = [
   BetweenParams,
   IsNullDoesNotAffectArity,
   IsNotNullDoesNotAffectArity,
+  IsDistinctFromParam,
+  IsNotDistinctFromParam,
+  IsDistinctFromCombinedWithAnotherCondition,
+  MakingFromTransparentDoesNotBreakJoinParams,
   MultipleAndConditions,
   OrConditions,
 ];
