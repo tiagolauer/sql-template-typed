@@ -4,11 +4,22 @@ import type { InferRowWith } from './parse.js';
 
 type CteEntry = [name: string, query: string];
 
-type ParseCteEntry<S extends string> = Trim<S> extends `${infer NameWord} ${infer AfterName}`
-  ? IsKeyword<FirstWord<Trim<AfterName>>, 'as'> extends true
-    ? Trim<DropFirstWord<Trim<AfterName>>> extends `(${infer AfterOpen}`
-      ? ExtractParenGroup<AfterOpen> extends { inner: infer SubQuery extends string; rest: infer Rest extends string }
-        ? { name: Trim<NameWord>; query: Trim<SubQuery>; rest: Trim<Rest> }
+type CteNameAndRest<S extends string> = S extends `${infer NamePart}(${infer AfterOpen}`
+  ? NamePart extends `${string} ${string}`
+    ? { name: FirstWord<S>; rest: Trim<DropFirstWord<S>> }
+    : ExtractParenGroup<AfterOpen> extends { rest: infer Rest extends string }
+      ? { name: NamePart; rest: Trim<Rest> }
+      : never
+  : { name: FirstWord<S>; rest: Trim<DropFirstWord<S>> };
+
+type ParseCteEntry<S extends string> = CteNameAndRest<Trim<S>> extends {
+  name: infer Name extends string;
+  rest: infer Rest extends string;
+}
+  ? IsKeyword<FirstWord<Rest>, 'as'> extends true
+    ? Trim<DropFirstWord<Rest>> extends `(${infer AfterOpen}`
+      ? ExtractParenGroup<AfterOpen> extends { inner: infer SubQuery extends string; rest: infer AfterQuery extends string }
+        ? { name: Name; query: Trim<SubQuery>; rest: Trim<AfterQuery> }
         : never
       : never
     : never
@@ -25,8 +36,12 @@ type ParseCteList<S extends string, Accumulated extends CteEntry[] = []> =
       : { ctes: [...Accumulated, [Name, Query]]; rest: Rest }
     : never;
 
+type SkipRecursiveKeyword<S extends string> = IsKeyword<FirstWord<S>, 'recursive'> extends true
+  ? Trim<DropFirstWord<S>>
+  : S;
+
 export type ParseWithClause<S extends string> = IsKeyword<FirstWord<S>, 'with'> extends true
-  ? ParseCteList<Trim<DropFirstWord<S>>> extends {
+  ? ParseCteList<SkipRecursiveKeyword<Trim<DropFirstWord<S>>>> extends {
       ctes: infer Ctes extends CteEntry[];
       rest: infer Rest extends string;
     }

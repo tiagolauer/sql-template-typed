@@ -46,9 +46,41 @@ type CteStrictUnknownColumnIsTypeError = Expect<
   >
 >;
 
+type WithRecursiveIsNotConfusedByTheKeyword = Expect<
+  Equal<
+    Query<DB, 'with recursive popular as (select id, title from posts) select id, title from popular'>,
+    { id: number; title: string }[]
+  >
+>;
+
+type WithRecursiveResolvesInStrictModeToo = Expect<
+  Equal<
+    StrictQuery<DB, 'with recursive popular as (select id, title from posts) select id, title from popular'>,
+    { id: number; title: string }[]
+  >
+>;
+
+type CteColumnListDoesNotBreakTheCteName = Expect<
+  Equal<
+    Query<DB, 'with popular(x) as (select id from posts) select x from popular'>,
+    { x: unknown }[]
+  >
+>;
+
+type CteMultiColumnListAlsoResolvesByName = Expect<
+  Equal<
+    Query<DB, 'with popular(x, y) as (select id, title from posts) select x, y from popular'>,
+    { x: unknown; y: unknown }[]
+  >
+>;
+
 export type CteLock = [
   SimpleCte,
   CteWithJoinAgainstRealTable,
   MultipleCtesSecondReferencesFirst,
   CteStrictUnknownColumnIsTypeError,
+  WithRecursiveIsNotConfusedByTheKeyword,
+  WithRecursiveResolvesInStrictModeToo,
+  CteColumnListDoesNotBreakTheCteName,
+  CteMultiColumnListAlsoResolvesByName,
 ];
