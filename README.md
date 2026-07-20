@@ -734,7 +734,7 @@ this.**
 | Derived tables | `from (select ...) x`, including subqueries with their own `WHERE`/`JOIN` |
 | Named parameters | `where id = @id` (SQL Server style) |
 | Backtick identifiers | `` select `id` from `users` `` (MySQL style) |
-| `TOP` clause | `select top 10 id from users`, `top (n)`, `top n percent` (SQL Server) |
+| `TOP` clause | `select top 10 id from users`, `top (n)`, `top n percent`, `top n with ties` (SQL Server) |
 | `OUTPUT` clause | `insert ... output inserted.id values (...)` (SQL Server) |
 
 ## Limitations
@@ -775,10 +775,12 @@ This is a focused tool for the common read path, not a full SQL grammar:
   `` `...` `` (MySQL — escape the backtick with `\`` inside the template
   literal). Schema-qualified tables (`public.users`) resolve by their final
   segment (`users`).
-- **`TOP` supports a plain count or `TOP N PERCENT`** — `TOP N WITH TIES` is
-  not parsed. `OUTPUT` only recognizes the `inserted`/`deleted` pseudo-table
-  prefixes (they resolve against the statement's single table); `OUTPUT ...
-  INTO @table` is not supported.
+- **`TOP` supports a plain count, `TOP N PERCENT`, `TOP N WITH TIES`, and
+  `TOP N PERCENT WITH TIES`** (any order of `PERCENT`/`WITH TIES`) — none of
+  these affect the inferred row shape, same as `LIMIT`/`OFFSET`. `OUTPUT`
+  only recognizes the `inserted`/`deleted` pseudo-table prefixes (they
+  resolve against the statement's single table); `OUTPUT ... INTO @table` is
+  not supported.
 - **Unknown columns, tables, or aliases resolve to `unknown`** by default — pass
   `{ strict: true }` to turn them into a `QueryTypeError` instead.
 

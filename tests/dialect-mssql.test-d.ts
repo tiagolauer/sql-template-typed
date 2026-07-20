@@ -42,6 +42,27 @@ type TopClauseWithPercent = Expect<
   Equal<Query<DB, 'select top 10 percent id from users'>, { id: number }[]>
 >;
 
+type TopClauseWithTies = Expect<
+  Equal<
+    Query<DB, 'select top 10 with ties id, name from users order by name desc'>,
+    { id: number; name: string }[]
+  >
+>;
+
+type TopClauseWithPercentAndTies = Expect<
+  Equal<
+    Query<DB, 'select top 10 percent with ties id from users order by name desc'>,
+    { id: number }[]
+  >
+>;
+
+type TopClauseWithParensAndTies = Expect<
+  Equal<
+    Query<DB, 'select top (10) with ties id from users order by name desc'>,
+    { id: number }[]
+  >
+>;
+
 type InsertOutputClause = Expect<
   Equal<
     Query<DB, 'insert into users (name) output inserted.id values (@name)'>,
@@ -75,6 +96,9 @@ export type MssqlLock = [
   TopClause,
   TopClauseWithParens,
   TopClauseWithPercent,
+  TopClauseWithTies,
+  TopClauseWithPercentAndTies,
+  TopClauseWithParensAndTies,
   InsertOutputClause,
   UpdateOutputClause,
   DeleteOutputClause,

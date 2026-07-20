@@ -41,11 +41,17 @@ type StripTopCount<S extends string> = Trim<S> extends `(${infer AfterOpen}`
     : Trim<S>
   : DropFirstWord<Trim<S>>;
 
+type StripWithTies<S extends string> = IsKeyword<FirstWord<S>, 'with'> extends true
+  ? IsKeyword<FirstWord<DropFirstWord<S>>, 'ties'> extends true
+    ? Trim<DropFirstWord<DropFirstWord<S>>>
+    : S
+  : S;
+
 type StripTopClause<S extends string> = IsKeyword<FirstWord<Trim<S>>, 'top'> extends true
   ? StripTopCount<DropFirstWord<Trim<S>>> extends infer AfterCount extends string
     ? IsKeyword<FirstWord<AfterCount>, 'percent'> extends true
-      ? Trim<DropFirstWord<AfterCount>>
-      : AfterCount
+      ? StripWithTies<Trim<DropFirstWord<AfterCount>>>
+      : StripWithTies<AfterCount>
     : S
   : S;
 
