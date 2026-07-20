@@ -38,15 +38,21 @@ type StripTrailingListPunctuation<S extends string> = S extends `${infer Rest})`
     ? StripTrailingListPunctuation<Rest>
     : S;
 
-type CleanPlaceholderToken<S extends string> = StripTrailingListPunctuation<StripLeadingParens<S>>;
+type CleanScanToken<S extends string> = StripTrailingListPunctuation<StripLeadingParens<S>>;
 
-type IsPlaceholder<Token extends string> = CleanPlaceholderToken<Token> extends '?'
+type CleanColumnToken<S extends string> = StripLeadingParens<S> extends infer Stripped extends string
+  ? Stripped extends `${string}(${string}`
+    ? Stripped
+    : StripTrailingListPunctuation<Stripped>
+  : never;
+
+type IsPlaceholder<Token extends string> = CleanScanToken<Token> extends '?'
   ? true
-  : CleanPlaceholderToken<Token> extends `$$${string}` | `@@${string}` | '$' | '@'
+  : CleanScanToken<Token> extends `$$${string}` | `@@${string}` | '$' | '@'
     ? false
-    : CleanPlaceholderToken<Token> extends `$${string}`
+    : CleanScanToken<Token> extends `$${string}`
       ? true
-      : CleanPlaceholderToken<Token> extends `@${string}`
+      : CleanScanToken<Token> extends `@${string}`
         ? true
         : false;
 
@@ -86,7 +92,7 @@ type DigitsToCounter<S extends string, Accumulated extends unknown[] = []> =
     : Accumulated;
 
 type PlaceholderPosition<Token extends string> =
-  CleanPlaceholderToken<Token> extends `$${infer Digits}`
+  CleanScanToken<Token> extends `$${infer Digits}`
     ? DigitsToCounter<Digits> extends [unknown, ...infer Position extends unknown[]]
       ? Position
       : never
@@ -146,7 +152,7 @@ type ScanParams<
       : never
     : IsTransparentToken<Head> extends true
       ? ScanParams<Tail, DB, Sources, PrevPrev, Prev, Indexed, Sequential>
-      : ScanParams<Tail, DB, Sources, Prev, Head, Indexed, Sequential>
+      : ScanParams<Tail, DB, Sources, Prev, CleanColumnToken<Head>, Indexed, Sequential>
   : S extends ''
     ? [...Indexed, ...Sequential]
     : IsPlaceholder<S> extends true
@@ -166,14 +172,6 @@ type InsertColumnList<S extends string> = AfterKeyword<S, 'into'> extends infer 
     : never
   : never;
 
-type InsertValuesGroup<S extends string> = AfterKeyword<S, 'values'> extends infer AfterValues extends string
-  ? Trim<AfterValues> extends `(${infer AfterOpen}`
-    ? ExtractParenGroup<AfterOpen> extends { inner: infer Vals extends string }
-      ? Vals
-      : never
-    : never
-  : never;
-
 type ColumnTypeAt<DB extends SchemaLike, Table extends string, Column extends string> =
   Table extends keyof DB
     ? Column extends keyof DB[Table]
@@ -181,13 +179,13 @@ type ColumnTypeAt<DB extends SchemaLike, Table extends string, Column extends st
       : unknown
     : unknown;
 
-type MatchInsertValueTypes<
+type MatchInsertValues<
   DB extends SchemaLike,
   Table extends string,
   Columns extends string[],
   Values extends string[],
-  Indexed extends unknown[] = [],
-  Sequential extends unknown[] = [],
+  Indexed extends unknown[],
+  Sequential extends unknown[],
 > = Values extends [infer Head extends string, ...infer ValuesTail extends string[]]
   ? Columns extends [infer ColumnHead extends string, ...infer ColumnsTail extends string[]]
     ? IsPlaceholder<Trim<Head>> extends true
@@ -195,11 +193,31 @@ type MatchInsertValueTypes<
           indexed: infer NextIndexed extends unknown[];
           sequential: infer NextSequential extends unknown[];
         }
-        ? MatchInsertValueTypes<DB, Table, ColumnsTail, ValuesTail, NextIndexed, NextSequential>
+        ? MatchInsertValues<DB, Table, ColumnsTail, ValuesTail, NextIndexed, NextSequential>
         : never
-      : MatchInsertValueTypes<DB, Table, ColumnsTail, ValuesTail, Indexed, Sequential>
-    : [...Indexed, ...Sequential]
-  : [...Indexed, ...Sequential];
+      : MatchInsertValues<DB, Table, ColumnsTail, ValuesTail, Indexed, Sequential>
+    : { indexed: Indexed; sequential: Sequential }
+  : { indexed: Indexed; sequential: Sequential };
+
+type ScanValuesGroups<
+  S extends string,
+  DB extends SchemaLike,
+  Table extends string,
+  Columns extends string[],
+  Indexed extends unknown[],
+  Sequential extends unknown[],
+> = Trim<S> extends `(${infer AfterOpen}`
+  ? ExtractParenGroup<AfterOpen> extends { inner: infer Vals extends string; rest: infer Rest extends string }
+    ? MatchInsertValues<DB, Table, Columns, SplitColumnList<Vals>, Indexed, Sequential> extends {
+        indexed: infer NextIndexed extends unknown[];
+        sequential: infer NextSequential extends unknown[];
+      }
+      ? Trim<Rest> extends `,${infer NextGroup}`
+        ? ScanValuesGroups<NextGroup, DB, Table, Columns, NextIndexed, NextSequential>
+        : { indexed: NextIndexed; sequential: NextSequential; rest: Trim<Rest> }
+      : never
+    : { indexed: Indexed; sequential: Sequential; rest: Trim<S> }
+  : { indexed: Indexed; sequential: Sequential; rest: Trim<S> };
 
 type InsertParamTypes<DB extends SchemaLike, Q extends string> = ParseStatement<Q> extends {
   sources: [infer Src extends Source];
@@ -207,11 +225,19 @@ type InsertParamTypes<DB extends SchemaLike, Q extends string> = ParseStatement<
   ? [InsertColumnList<Q>] extends [never]
     ? unknown[]
     : InsertColumnList<Q> extends { columns: infer Columns extends string[]; rest: infer AfterColumns extends string }
-      ? [InsertValuesGroup<AfterColumns>] extends [never]
-        ? unknown[]
-        : MatchInsertValueTypes<DB, Src['table'], Columns, SplitColumnList<InsertValuesGroup<AfterColumns>>>
+      ? AfterKeyword<AfterColumns, 'values'> extends infer AfterValues
+        ? AfterValues extends string
+          ? ScanValuesGroups<AfterValues, DB, Src['table'], Columns, [], []> extends {
+              indexed: infer Indexed extends unknown[];
+              sequential: infer Sequential extends unknown[];
+              rest: infer Rest extends string;
+            }
+            ? ScanParams<Rest, DB, [Src], '', '', Indexed, Sequential>
+            : unknown[]
+          : unknown[]
+        : unknown[]
       : unknown[]
-    : unknown[];
+  : unknown[];
 
 type ContainsPlaceholderLikeChar<S extends string> = S extends
   | `${string}$${string}`
