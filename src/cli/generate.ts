@@ -15,6 +15,12 @@ export interface GenerateOptions {
 
 const SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
 
+const CREDENTIALS_PATTERN = /\/\/[^@/]+@/;
+
+export function redactCredentials(url: string): string {
+  return url.replace(CREDENTIALS_PATTERN, '//***@');
+}
+
 export function detectDialect(url: string): Dialect {
   if (url.startsWith('postgres://') || url.startsWith('postgresql://')) {
     return 'postgres';
@@ -30,7 +36,7 @@ export function detectDialect(url: string): Dialect {
 
   if (SCHEME_PATTERN.test(url)) {
     throw new Error(
-      `Unrecognized connection URL "${url}". Expected postgres://, postgresql://, mysql://, mssql://, sqlserver://, or a path to a SQLite database file.`,
+      `Unrecognized connection URL "${redactCredentials(url)}". Expected postgres://, postgresql://, mysql://, mssql://, sqlserver://, or a path to a SQLite database file.`,
     );
   }
 

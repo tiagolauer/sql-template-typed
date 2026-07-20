@@ -21,7 +21,7 @@ describe('detectDialect', () => {
 
   it('rejects an unrecognized URL scheme instead of silently falling back to sqlite', () => {
     expect(() => detectDialect('postgress://user:pass@host/db')).toThrow(
-      'Unrecognized connection URL "postgress://user:pass@host/db"',
+      'Unrecognized connection URL "postgress://***@host/db"',
     );
     expect(() => detectDialect('mongodb://user:pass@host/db')).toThrow('Unrecognized connection URL');
   });
