@@ -673,9 +673,10 @@ type BuildMixed<
   Sources extends Source[],
   Entries extends [string, string][],
   Strict extends boolean,
+  Accumulated = unknown,
 > = Entries extends [infer Head extends [string, string], ...infer Tail extends [string, string][]]
-  ? EntryContribution<DB, Sources, Head, Strict> & BuildMixed<DB, Sources, Tail, Strict>
-  : unknown;
+  ? BuildMixed<DB, Sources, Tail, Strict, Accumulated & EntryContribution<DB, Sources, Head, Strict>>
+  : Accumulated;
 
 type BuildSelection<
   DB extends SchemaLike,
