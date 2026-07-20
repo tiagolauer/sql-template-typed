@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
@@ -17,6 +17,13 @@ describe('detectDialect', () => {
   it('falls back to sqlite for a bare file path', () => {
     expect(detectDialect('./app.db')).toBe('sqlite');
     expect(detectDialect(':memory:')).toBe('sqlite');
+  });
+
+  it('rejects an unrecognized URL scheme instead of silently falling back to sqlite', () => {
+    expect(() => detectDialect('postgress://user:pass@host/db')).toThrow(
+      'Unrecognized connection URL "postgress://user:pass@host/db"',
+    );
+    expect(() => detectDialect('mongodb://user:pass@host/db')).toThrow('Unrecognized connection URL');
   });
 });
 
@@ -59,6 +66,21 @@ describe('runGenerate (end to end against a real sqlite file)', () => {
       await expect(
         runGenerate({ url: dbFile, out: join(dir, 'schema.ts'), dialect: 'sqlite' }),
       ).rejects.toThrow('No tables found');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuses to introspect a nonexistent sqlite file instead of creating one', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'owlsql-'));
+    const missingFile = join(dir, 'typo.db');
+
+    try {
+      await expect(
+        runGenerate({ url: missingFile, out: join(dir, 'schema.ts'), dialect: 'sqlite' }),
+      ).rejects.toThrow('SQLite database file not found');
+
+      expect(existsSync(missingFile)).toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
