@@ -640,6 +640,11 @@ otherwise).
 - No `JOIN`/alias awareness — only the first `FROM <table>` in the string is
   used to scope both completions and hover; a second table from a `JOIN` is
   not offered.
+- No table-name completions after `FROM`/`JOIN` — only column names, after
+  `SELECT`/`WHERE`, are suggested.
+- The first `FROM <table>` is found with a regex, not a real SQL parser: a
+  `FROM (subquery)` can make it lock onto a table name from inside the
+  subquery instead of recognizing there's no real outer table yet.
 - Only plain string/template literals with **no interpolation**
   (`` db.query(`select ...`) ``) are recognized — which is the only form the
   library ever expects you to write, since parameters are SQL placeholders

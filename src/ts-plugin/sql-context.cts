@@ -2,7 +2,7 @@ const SELECT_START = /^select\b/i;
 const HAS_FROM = /\bfrom\b/i;
 const HAS_WHERE = /\bwhere\b/i;
 const TRAILING_WORD = /([A-Za-z_][A-Za-z0-9_]*)$/;
-const FROM_TABLE = /\bfrom\s+([A-Za-z_][A-Za-z0-9_]*)/i;
+const FROM_TABLE = /\bfrom\s+(?:[A-Za-z_][A-Za-z0-9_]*\.)?([A-Za-z_][A-Za-z0-9_]*)/i;
 const WORD_CHAR = /[A-Za-z0-9_]/;
 const WORD_START_CHAR = /[A-Za-z_]/;
 

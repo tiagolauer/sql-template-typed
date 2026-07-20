@@ -67,4 +67,12 @@ describe('findFromTable', () => {
   it('returns null when there is no FROM clause yet', () => {
     expect(findFromTable('select id, na')).toBeNull();
   });
+
+  it('strips a schema qualifier instead of capturing it as the table name', () => {
+    expect(findFromTable('select id from public.users')).toBe('users');
+  });
+
+  it('finds the table name when an alias follows it', () => {
+    expect(findFromTable('select u.id from users u where u.name = 1')).toBe('users');
+  });
 });

@@ -1,18 +1,23 @@
 import type * as ts from 'typescript';
 
+function scopeToTable(
+  tableSymbols: ts.Symbol[],
+  onlyTable: string | null,
+): ts.Symbol[] {
+  if (!onlyTable) {
+    return tableSymbols;
+  }
+
+  return tableSymbols.filter((symbol) => symbol.getName() === onlyTable);
+}
+
 function getColumnNames(
   checker: ts.TypeChecker,
   dbType: ts.Type,
   node: ts.Node,
   onlyTable: string | null,
 ): string[] {
-  const tableSymbols = dbType.getProperties();
-
-  const scopedTables = onlyTable
-    ? tableSymbols.filter((symbol) => symbol.getName() === onlyTable)
-    : tableSymbols;
-
-  const tables = scopedTables.length > 0 ? scopedTables : tableSymbols;
+  const tables = scopeToTable(dbType.getProperties(), onlyTable);
 
   const columnNames = new Set<string>();
 
@@ -33,24 +38,28 @@ function getColumnType(
   onlyTable: string | null,
   columnName: string,
 ): ts.Type | null {
-  const tableSymbols = dbType.getProperties();
+  const tables = scopeToTable(dbType.getProperties(), onlyTable);
 
-  const scopedTables = onlyTable
-    ? tableSymbols.filter((symbol) => symbol.getName() === onlyTable)
-    : tableSymbols;
-
-  const tables = scopedTables.length > 0 ? scopedTables : tableSymbols;
+  const matches: ts.Type[] = [];
 
   for (const tableSymbol of tables) {
     const tableType = checker.getTypeOfSymbolAtLocation(tableSymbol, node);
     for (const columnSymbol of tableType.getProperties()) {
       if (columnSymbol.getName() === columnName) {
-        return checker.getTypeOfSymbolAtLocation(columnSymbol, node);
+        matches.push(checker.getTypeOfSymbolAtLocation(columnSymbol, node));
       }
     }
   }
 
-  return null;
+  if (matches.length === 0) {
+    return null;
+  }
+
+  const [first, ...rest] = matches;
+  const firstText = checker.typeToString(first as ts.Type);
+  const isUnambiguous = rest.every((type) => checker.typeToString(type) === firstText);
+
+  return isUnambiguous ? (first as ts.Type) : null;
 }
 
 export = { getColumnNames, getColumnType };
