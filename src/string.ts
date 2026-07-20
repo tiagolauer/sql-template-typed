@@ -103,41 +103,68 @@ export type DropFirstWord<S extends string> = S extends `${string} ${infer Rest}
 export type IsKeyword<Token extends string, Keyword extends string> =
   Lowercase<Token> extends Lowercase<Keyword> ? true : false;
 
+type SplitAtNextParen<S extends string> = S extends `${infer BeforeOpen}(${infer AfterOpen}`
+  ? BeforeOpen extends `${infer BeforeClose})${infer AfterClose}`
+    ? { before: BeforeClose; marker: ')'; after: `${AfterClose}(${AfterOpen}` }
+    : { before: BeforeOpen; marker: '('; after: AfterOpen }
+  : S extends `${infer BeforeClose})${infer AfterClose}`
+    ? { before: BeforeClose; marker: ')'; after: AfterClose }
+    : never;
+
 type ScanParenGroup<
   S extends string,
   Depth extends unknown[],
   Inner extends string,
-> = S extends `${infer Char}${infer Rest}`
-  ? Char extends '('
-    ? ScanParenGroup<Rest, [...Depth, unknown], `${Inner}${Char}`>
-    : Char extends ')'
-      ? Depth extends [unknown, ...infer DepthRest extends unknown[]]
-        ? ScanParenGroup<Rest, DepthRest, `${Inner}${Char}`>
-        : { inner: Inner; rest: Rest }
-      : ScanParenGroup<Rest, Depth, `${Inner}${Char}`>
-  : { inner: Inner; rest: '' };
+> = [SplitAtNextParen<S>] extends [never]
+  ? { inner: `${Inner}${S}`; rest: '' }
+  : SplitAtNextParen<S> extends {
+        before: infer Before extends string;
+        marker: infer Marker extends string;
+        after: infer After extends string;
+      }
+    ? Marker extends '('
+      ? ScanParenGroup<After, [...Depth, unknown], `${Inner}${Before}(`>
+      : Depth extends [unknown, ...infer DepthRest extends unknown[]]
+        ? ScanParenGroup<After, DepthRest, `${Inner}${Before})`>
+        : { inner: `${Inner}${Before}`; rest: After }
+    : never;
 
 export type ExtractParenGroup<S extends string> = ScanParenGroup<S, [], ''>;
+
+type SplitAtNextListMarker<S extends string> = S extends `${infer BeforeComma},${infer AfterComma}`
+  ? BeforeComma extends `${infer BeforeOpen}(${infer AfterOpen}`
+    ? BeforeOpen extends `${infer BeforeClose})${infer AfterClose}`
+      ? { before: BeforeClose; marker: ')'; after: `${AfterClose}(${AfterOpen},${AfterComma}` }
+      : { before: BeforeOpen; marker: '('; after: `${AfterOpen},${AfterComma}` }
+    : BeforeComma extends `${infer BeforeClose})${infer AfterClose}`
+      ? { before: BeforeClose; marker: ')'; after: `${AfterClose},${AfterComma}` }
+      : { before: BeforeComma; marker: ','; after: AfterComma }
+  : SplitAtNextParen<S>;
 
 type ScanColumnList<
   S extends string,
   Depth extends unknown[],
   Current extends string,
-> = S extends `${infer Char}${infer Rest}`
-  ? Char extends '('
-    ? ScanColumnList<Rest, [...Depth, unknown], `${Current}${Char}`>
-    : Char extends ')'
-      ? Depth extends [unknown, ...infer DepthRest extends unknown[]]
-        ? ScanColumnList<Rest, DepthRest, `${Current}${Char}`>
-        : ScanColumnList<Rest, Depth, `${Current}${Char}`>
-      : Char extends ','
-        ? Depth extends []
-          ? [Trim<Current>, ...ScanColumnList<Rest, Depth, ''>]
-          : ScanColumnList<Rest, Depth, `${Current}${Char}`>
-        : ScanColumnList<Rest, Depth, `${Current}${Char}`>
-  : [Trim<Current>];
+  Accumulated extends string[],
+> = [SplitAtNextListMarker<S>] extends [never]
+  ? [...Accumulated, Trim<`${Current}${S}`>]
+  : SplitAtNextListMarker<S> extends {
+        before: infer Before extends string;
+        marker: infer Marker extends string;
+        after: infer After extends string;
+      }
+    ? Marker extends '('
+      ? ScanColumnList<After, [...Depth, unknown], `${Current}${Before}(`, Accumulated>
+      : Marker extends ')'
+        ? Depth extends [unknown, ...infer DepthRest extends unknown[]]
+          ? ScanColumnList<After, DepthRest, `${Current}${Before})`, Accumulated>
+          : ScanColumnList<After, Depth, `${Current}${Before})`, Accumulated>
+        : Depth extends []
+          ? ScanColumnList<After, Depth, '', [...Accumulated, Trim<`${Current}${Before}`>]>
+          : ScanColumnList<After, Depth, `${Current}${Before},`, Accumulated>
+    : never;
 
-export type SplitColumnList<S extends string> = ScanColumnList<S, [], ''>;
+export type SplitColumnList<S extends string> = ScanColumnList<S, [], '', []>;
 
 export type OpenCount<
   S extends string,
