@@ -587,6 +587,9 @@ db.query(`
 
 db.query(`select id, name from users`)
 //                    ^ hovering shows (column) name: string
+
+db.query(`select id from users where na`)
+//                                    ^ autocomplete suggests `name`
 ```
 
 Want to see it running for yourself before there's a recorded demo here?
@@ -618,13 +621,16 @@ is the #1 reason this kind of plugin appears to do nothing. Other editors
 that talk to `tsserver` (Cursor, some Neovim/Sublime LSP setups) generally
 pick up `tsconfig.json` plugins automatically.
 
-**What it does:** suggests column names right after `SELECT` or a comma in
-the column list, and shows a column's resolved type on hover, for
-`db.query(...)` calls made through a client built with `createTypedDb<DB>`.
-If a `FROM <table>` is already present anywhere later in the same string,
-both completions and hover are scoped to that table; otherwise completions
-fall back to the deduplicated union of every table's columns in `DB` — which
-is exactly what covers the example above before you've typed `FROM` at all.
+**What it does:** suggests column names right after `SELECT`/a comma in the
+column list or after `WHERE`/`AND`/`OR`, and shows a column's resolved type
+on hover, for `db.query(...)` calls made through a client built with
+`createTypedDb<DB>`. If a `FROM <table>` is already present anywhere later
+in the same string, completions and hover are scoped to that table;
+otherwise `SELECT`-list completions fall back to the deduplicated union of
+every table's columns in `DB` — which is exactly what covers the example
+above before you've typed `FROM` at all. `WHERE`-position completions
+require a `FROM` to already be present (there's no table to scope to
+otherwise).
 
 **What it does not do** (documented scope, not bugs):
 
@@ -638,8 +644,8 @@ is exactly what covers the example above before you've typed `FROM` at all.
   (`` db.query(`select ...`) ``) are recognized — which is the only form the
   library ever expects you to write, since parameters are SQL placeholders
   (`$1`/`?`/`@name`), never JS template interpolation.
-- Completions after `WHERE`/`ORDER BY`/etc. aren't offered yet — only the
-  `SELECT` column list.
+- Completions after `ORDER BY`/`GROUP BY`/`HAVING`/etc. aren't offered yet —
+  only the `SELECT` column list and `WHERE` clause.
 - **Requires TypeScript < 7.** TypeScript 7's native (Go-based) compiler
   removed the classic JS Compiler API (`ts.Node`, `ts.forEachChild`,
   `ts.createProgram`, ...) that this plugin — and, as of this writing, every

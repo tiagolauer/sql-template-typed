@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { matchQueryLiteral } from '../src/ts-plugin/detect.cts';
 import { getColumnNames } from '../src/ts-plugin/schema.cts';
-import { getSelectListContext, findFromTable } from '../src/ts-plugin/sql-context.cts';
+import { getSelectListContext, getWhereClauseContext, findFromTable } from '../src/ts-plugin/sql-context.cts';
 
 const FIXTURE = `
 interface TypedDb<DB> {
@@ -21,6 +21,7 @@ declare const db: TypedDb<DB>;
 
 db.query(\`select id, na\`);
 db.query(\`select id, na from posts\`);
+db.query(\`select id from users where na\`);
 `;
 
 function buildProgram(source: string): { program: ts.Program; sourceFile: ts.SourceFile; filePath: string; dir: string } {
@@ -108,5 +109,31 @@ describe('ts-plugin: detect + schema against a real ts.Program', () => {
     expect(columns.sort()).toEqual(['id', 'title']);
     expect(columns).not.toContain('name');
     expect(columns).not.toContain('email');
+  });
+
+  it('suggests columns after WHERE, scoped to the FROM table', () => {
+    const { program, sourceFile, dir } = buildProgram(FIXTURE);
+    cleanupDir = dir;
+    const checker = program.getTypeChecker();
+
+    const queryText = 'select id from users where na';
+    const literalStart = sourceFile.text.indexOf(`\`${queryText}\``) + 1;
+    const cursor = sourceFile.text.indexOf(queryText) + queryText.length;
+    const match = matchQueryLiteral(ts, checker, sourceFile, cursor);
+    expect(match).not.toBeNull();
+    if (!match) return;
+
+    const textBeforeCursor = sourceFile.text.slice(literalStart, cursor);
+    const context = getSelectListContext(textBeforeCursor) ?? getWhereClauseContext(textBeforeCursor);
+    expect(context).toEqual({ prefix: 'na' });
+    if (!context) return;
+
+    const table = findFromTable(match.literal.text);
+    expect(table).toBe('users');
+
+    const columns = getColumnNames(checker, match.dbType, match.literal, table);
+    const filtered = columns.filter((name) => name.startsWith(context.prefix));
+
+    expect(filtered).toEqual(['name']);
   });
 });

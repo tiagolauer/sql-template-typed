@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getSelectListContext, findFromTable } from '../src/ts-plugin/sql-context.cts';
+import { getSelectListContext, getWhereClauseContext, findFromTable } from '../src/ts-plugin/sql-context.cts';
 
 describe('getSelectListContext', () => {
   it('extracts the partial word being typed in a SELECT list', () => {
@@ -22,6 +22,34 @@ describe('getSelectListContext', () => {
 
   it('is case-insensitive on the SELECT keyword', () => {
     expect(getSelectListContext('SELECT id, na')).toEqual({ prefix: 'na' });
+  });
+});
+
+describe('getWhereClauseContext', () => {
+  it('extracts the partial word being typed after WHERE', () => {
+    expect(getWhereClauseContext('select id from users where na')).toEqual({ prefix: 'na' });
+  });
+
+  it('extracts the partial word being typed after AND/OR', () => {
+    expect(getWhereClauseContext('select id from users where active = true and na')).toEqual({
+      prefix: 'na',
+    });
+  });
+
+  it('returns an empty prefix right after WHERE', () => {
+    expect(getWhereClauseContext('select id from users where ')).toEqual({ prefix: '' });
+  });
+
+  it('returns null when there is no FROM clause yet', () => {
+    expect(getWhereClauseContext('select id where na')).toBeNull();
+  });
+
+  it('returns null when there is no WHERE clause yet', () => {
+    expect(getWhereClauseContext('select id from na')).toBeNull();
+  });
+
+  it('is case-insensitive on the WHERE keyword', () => {
+    expect(getWhereClauseContext('select id from users WHERE na')).toEqual({ prefix: 'na' });
   });
 });
 
