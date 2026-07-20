@@ -3,9 +3,13 @@ import ts from 'typescript';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { matchQueryLiteral } from '../src/ts-plugin/detect.cts';
-import { getColumnNames } from '../src/ts-plugin/schema.cts';
-import { getSelectListContext, getWhereClauseContext, findFromTable } from '../src/ts-plugin/sql-context.cts';
+import detectModule from '../src/ts-plugin/detect.cts';
+import schemaModule from '../src/ts-plugin/schema.cts';
+import sqlContext from '../src/ts-plugin/sql-context.cts';
+
+const { matchQueryLiteral } = detectModule;
+const { getColumnNames } = schemaModule;
+const { getSelectListContext, getWhereClauseContext, findFromTable } = sqlContext;
 
 const FIXTURE = `
 interface TypedDb<DB> {

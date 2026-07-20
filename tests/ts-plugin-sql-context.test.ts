@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { getSelectListContext, getWhereClauseContext, findFromTable } from '../src/ts-plugin/sql-context.cts';
+import sqlContext from '../src/ts-plugin/sql-context.cts';
+
+const { getSelectListContext, getWhereClauseContext, findFromTable } = sqlContext;
 
 describe('getSelectListContext', () => {
   it('extracts the partial word being typed in a SELECT list', () => {

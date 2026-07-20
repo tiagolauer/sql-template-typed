@@ -50,7 +50,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.ts-plugin.json",
     "typecheck": "tsc --noEmit",
-    "test:types": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.ts-plugin.json",
+    "test:types": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.ts-plugin.json && tsc --noEmit -p tsconfig.ts-plugin-tests.json",
     "test:runtime": "vitest run",
     "test": "npm run test:types && npm run test:runtime",
     "prepublishOnly": "npm run test && npm run build"
