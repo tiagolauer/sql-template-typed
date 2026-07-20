@@ -69,6 +69,36 @@ type InsertWithoutReturning = Expect<
   Equal<Query<DB, 'insert into users (name) values ($1)'>, Record<string, never>[]>
 >;
 
+type NowIsDate = Expect<
+  Equal<Query<DB, 'select now() as created'>, { created: Date }[]>
+>;
+
+type CurrentTimestampIsDate = Expect<
+  Equal<Query<DB, 'select current_timestamp() as created'>, { created: Date }[]>
+>;
+
+type CurrentDateIsDate = Expect<
+  Equal<Query<DB, 'select current_date() as today'>, { today: Date }[]>
+>;
+
+type NullifIsUnknown = Expect<
+  Equal<Query<DB, 'select nullif(age) as age from users'>, { age: unknown }[]>
+>;
+
+type GreatestAndLeastAreNumber = Expect<
+  Equal<
+    Query<DB, 'select greatest(age) as hi, least(age) as lo from users'>,
+    { hi: number; lo: number }[]
+  >
+>;
+
+type PowerAndModAreNumber = Expect<
+  Equal<
+    Query<DB, 'select power(age) as squared, mod(age) as remainder from users'>,
+    { squared: number; remainder: number }[]
+  >
+>;
+
 export type Tier2Lock = [
   CountStar,
   CountAliased,
@@ -81,4 +111,10 @@ export type Tier2Lock = [
   UpdateReturningStar,
   DeleteReturning,
   InsertWithoutReturning,
+  NowIsDate,
+  CurrentTimestampIsDate,
+  CurrentDateIsDate,
+  NullifIsUnknown,
+  GreatestAndLeastAreNumber,
+  PowerAndModAreNumber,
 ];

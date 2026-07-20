@@ -13,6 +13,10 @@ export interface FunctionReturnTypes {
   ceil: number;
   floor: number;
   round: number;
+  power: number;
+  mod: number;
+  greatest: number;
+  least: number;
   lower: string;
   upper: string;
   trim: string;
@@ -20,6 +24,10 @@ export interface FunctionReturnTypes {
   rtrim: string;
   concat: string;
   coalesce: unknown;
+  nullif: unknown;
+  now: Date;
+  current_timestamp: Date;
+  current_date: Date;
   row_number: number;
   rank: number;
   dense_rank: number;

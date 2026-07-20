@@ -16,7 +16,7 @@ type LiteralAliasResolvesKey = Expect<
 >;
 
 type FunctionCallWithNoFromResolvesKey = Expect<
-  Equal<Query<DB, 'select now() as now'>, { now: unknown }[]>
+  Equal<Query<DB, 'select random_seed() as seed'>, { seed: unknown }[]>
 >;
 
 type StrictModeReportsNoFromClauseInsteadOfEmptyTableName = Expect<

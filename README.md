@@ -353,9 +353,10 @@ const shout = await db.query('select id, upper(name) as name from users');
 ```
 
 Recognized: `count`, `sum`, `avg`, `min`, `max`, `length`, `char_length`,
-`octet_length`, `abs`, `ceil`, `floor`, `round` → `number`; `lower`, `upper`,
-`trim`, `ltrim`, `rtrim`, `concat` → `string`; `coalesce` → `unknown`. Anything
-else resolves to `unknown`.
+`octet_length`, `abs`, `ceil`, `floor`, `round`, `power`, `mod`, `greatest`,
+`least` → `number`; `lower`, `upper`, `trim`, `ltrim`, `rtrim`, `concat` →
+`string`; `coalesce`, `nullif` → `unknown`; `now`, `current_timestamp`,
+`current_date` → `Date`. Anything else resolves to `unknown`.
 
 ### 7. INSERT / UPDATE / DELETE with RETURNING
 
