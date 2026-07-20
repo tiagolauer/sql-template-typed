@@ -15,14 +15,14 @@ interface DB {
 type ScalarSubqueryKeepsSiblingColumns = Expect<
   Equal<
     Query<DB, 'select (select max(id) from orders) as m, name from users'>,
-    { m: unknown; name: string }[]
+    { m: number; name: string }[]
   >
 >;
 
-type ScalarSubqueryNoAliasFallsBackToRawText = Expect<
+type ScalarSubqueryNoAliasFallsBackToRawTextKey = Expect<
   Equal<
     Query<DB, 'select (select max(id) from orders), name from users'>,
-    { '(select max(id) from orders)': unknown; name: string }[]
+    { '(select max(id) from orders)': number; name: string }[]
   >
 >;
 
@@ -42,7 +42,7 @@ type FunctionArgWithFromKeywordResolvesAlias = Expect<
 
 export type BehaviorLock = [
   ScalarSubqueryKeepsSiblingColumns,
-  ScalarSubqueryNoAliasFallsBackToRawText,
+  ScalarSubqueryNoAliasFallsBackToRawTextKey,
   ParenthesizedArithmeticGroupResolvesAlias,
   FunctionArgWithFromKeywordResolvesAlias,
 ];
