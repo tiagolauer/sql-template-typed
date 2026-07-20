@@ -1,4 +1,4 @@
-import { createTypedDb, ResultStatus, type Query } from '@owlsql/core';
+import { createTypedDb, ResultStatus, type Query, type StrictQuery } from '@owlsql/core';
 import type { DB } from './schema.js';
 
 // --- 1. Type-only usage: hover `Result` below to see the inferred row shape.
