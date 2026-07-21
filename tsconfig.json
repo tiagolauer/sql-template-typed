@@ -14,7 +14,7 @@
     "isolatedModules": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src", "tests"],
+  "include": ["src", "tests", "vitest.config.ts"],
   "exclude": [
     "src/ts-plugin",
     "tests/ts-plugin-sql-context.test.ts",

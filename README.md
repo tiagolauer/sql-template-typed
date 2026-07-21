@@ -152,8 +152,14 @@ lives in the `.d.ts` types.
 npm install @owlsql/core
 ```
 
-`typescript` is a peer dependency (**>= 5.0** — required for template literal
-type recursion). You almost certainly already have it.
+`typescript` is a peer dependency (**>= 5.0, < 8** — template literal type
+recursion needs 5.0; the ts-plugin does not load on TS 7). You almost
+certainly already have it.
+
+The package is **ESM-only** (`import` only — `require()` is not supported).
+Node support: **>= 20** for the library and CLI; the `node:sqlite` adapter
+and the CLI's SQLite introspection additionally need **Node >= 22.5** (they
+fail with a clear error below that).
 
 ## Tutorial
 

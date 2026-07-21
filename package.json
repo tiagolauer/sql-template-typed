@@ -4,8 +4,6 @@
   "description": "Parse SQL in TypeScript template literal types and infer the result shape from your schema — no codegen, no ORM.",
   "type": "module",
   "sideEffects": false,
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
     "owlsql": "./dist/cli/index.js"
@@ -49,7 +47,7 @@
     "README.md"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json && tsc -p tsconfig.ts-plugin.json",
@@ -65,7 +63,7 @@
     "mysql2": ">=3.0.0",
     "pg": ">=8.0.0",
     "postgres": ">=3.0.0",
-    "typescript": ">=5.0.0"
+    "typescript": ">=5.0.0 <8"
   },
   "peerDependenciesMeta": {
     "kysely": {
