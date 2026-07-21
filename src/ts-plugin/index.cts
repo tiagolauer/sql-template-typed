@@ -25,81 +25,90 @@ function init(modules: { typescript: typeof ts }) {
       position,
       options,
     ) => {
-      const prior = info.languageService.getCompletionsAtPosition(fileName, position, options);
+      const native = () =>
+        info.languageService.getCompletionsAtPosition(fileName, position, options);
 
-      const program = info.languageService.getProgram();
-      const sourceFile = program?.getSourceFile(fileName);
-      if (!program || !sourceFile) {
-        return prior;
+      try {
+        const program = info.languageService.getProgram();
+        const sourceFile = program?.getSourceFile(fileName);
+        if (!program || !sourceFile) {
+          return native();
+        }
+
+        const checker = program.getTypeChecker();
+        const match = matchQueryLiteral(typescript, checker, sourceFile, position);
+        if (!match) {
+          return native();
+        }
+
+        const literalStart = match.literal.getStart(sourceFile) + 1;
+        const textBeforeCursor = sourceFile.text.slice(literalStart, position);
+        const context = getSelectListContext(textBeforeCursor) ?? getWhereClauseContext(textBeforeCursor);
+        if (!context) {
+          return native();
+        }
+
+        const fullLiteralText = match.literal.text;
+        const table = findFromTable(fullLiteralText);
+        const columns = getColumnNames(checker, match.dbType, match.literal, table);
+        const filtered = columns.filter((name) => name.startsWith(context.prefix));
+
+        return {
+          isGlobalCompletion: false,
+          isMemberCompletion: false,
+          isNewIdentifierLocation: false,
+          entries: filtered.map((name) => ({
+            name,
+            kind: typescript.ScriptElementKind.memberVariableElement,
+            sortText: '0',
+          })),
+        };
+      } catch {
+        return native();
       }
-
-      const checker = program.getTypeChecker();
-      const match = matchQueryLiteral(typescript, checker, sourceFile, position);
-      if (!match) {
-        return prior;
-      }
-
-      const literalStart = match.literal.getStart(sourceFile) + 1;
-      const textBeforeCursor = sourceFile.text.slice(literalStart, position);
-      const context = getSelectListContext(textBeforeCursor) ?? getWhereClauseContext(textBeforeCursor);
-      if (!context) {
-        return prior;
-      }
-
-      const fullLiteralText = match.literal.text;
-      const table = findFromTable(fullLiteralText);
-      const columns = getColumnNames(checker, match.dbType, match.literal, table);
-      const filtered = columns.filter((name) => name.startsWith(context.prefix));
-
-      return {
-        isGlobalCompletion: false,
-        isMemberCompletion: false,
-        isNewIdentifierLocation: false,
-        entries: filtered.map((name) => ({
-          name,
-          kind: typescript.ScriptElementKind.memberVariableElement,
-          sortText: '0',
-        })),
-      };
     };
 
     proxy.getCompletionsAtPosition = getCompletionsAtPosition;
 
     const getQuickInfoAtPosition: ts.LanguageService['getQuickInfoAtPosition'] = (fileName, position) => {
-      const prior = info.languageService.getQuickInfoAtPosition(fileName, position);
+      const native = () => info.languageService.getQuickInfoAtPosition(fileName, position);
 
-      const program = info.languageService.getProgram();
-      const sourceFile = program?.getSourceFile(fileName);
-      if (!program || !sourceFile) {
-        return prior;
+      try {
+        const program = info.languageService.getProgram();
+        const sourceFile = program?.getSourceFile(fileName);
+        if (!program || !sourceFile) {
+          return native();
+        }
+
+        const checker = program.getTypeChecker();
+        const match = matchQueryLiteral(typescript, checker, sourceFile, position);
+        if (!match) {
+          return native();
+        }
+
+        const literalStart = match.literal.getStart(sourceFile) + 1;
+        const word = getWordAtOffset(match.literal.text, position - literalStart);
+        if (!word) {
+          return native();
+        }
+
+        const table = findFromTable(match.literal.text);
+        const columnType = getColumnType(checker, match.dbType, match.literal, table, word.word);
+        if (!columnType) {
+          return native();
+        }
+
+        const typeText = checker.typeToString(columnType);
+
+        return {
+          kind: typescript.ScriptElementKind.memberVariableElement,
+          kindModifiers: '',
+          textSpan: { start: literalStart + word.start, length: word.end - word.start },
+          displayParts: [{ text: `(column) ${word.word}: ${typeText}`, kind: 'text' }],
+        };
+      } catch {
+        return native();
       }
-
-      const checker = program.getTypeChecker();
-      const match = matchQueryLiteral(typescript, checker, sourceFile, position);
-      if (!match) {
-        return prior;
-      }
-
-      const literalStart = match.literal.getStart(sourceFile) + 1;
-      const word = getWordAtOffset(match.literal.text, position - literalStart);
-      if (!word) {
-        return prior;
-      }
-
-      const table = findFromTable(match.literal.text);
-      const columnType = getColumnType(checker, match.dbType, match.literal, table, word.word);
-      if (!columnType) {
-        return prior;
-      }
-
-      const typeText = checker.typeToString(columnType);
-
-      return {
-        kind: typescript.ScriptElementKind.memberVariableElement,
-        kindModifiers: '',
-        textSpan: { start: literalStart + word.start, length: word.end - word.start },
-        displayParts: [{ text: `(column) ${word.word}: ${typeText}`, kind: 'text' }],
-      };
     };
 
     proxy.getQuickInfoAtPosition = getQuickInfoAtPosition;

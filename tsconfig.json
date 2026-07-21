@@ -21,6 +21,7 @@
     "tests/ts-plugin-completions.test.ts",
     "tests/ts-plugin-hover.test.ts",
     "tests/ts-plugin-detect.test.ts",
-    "tests/ts-plugin-schema.test.ts"
+    "tests/ts-plugin-schema.test.ts",
+    "tests/ts-plugin-proxy.test.ts"
   ]
 }
