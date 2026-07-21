@@ -1,9 +1,11 @@
-import type { Pool } from 'pg';
+import type { Pool, Client, PoolClient } from 'pg';
 import type { Executor } from '../index.js';
 
-export function createPgExecutor(pool: Pool): Executor {
+export type PgQueryable = Pool | Client | PoolClient;
+
+export function createPgExecutor(client: PgQueryable): Executor {
   return async (sql, params) => {
-    const result = await pool.query(sql, params as unknown[]);
+    const result = await client.query(sql, params as unknown[]);
     return result.rows;
   };
 }
