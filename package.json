@@ -31,6 +31,10 @@
       "types": "./dist/adapters/node-sqlite.d.ts",
       "import": "./dist/adapters/node-sqlite.js"
     },
+    "./mssql": {
+      "types": "./dist/adapters/mssql.d.ts",
+      "import": "./dist/adapters/mssql.js"
+    },
     "./kysely": {
       "types": "./dist/adapters/kysely.d.ts",
       "import": "./dist/adapters/kysely.js"

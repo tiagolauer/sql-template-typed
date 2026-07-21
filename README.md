@@ -582,24 +582,20 @@ Swap `createPgExecutor` for `createMysql2Executor`/`createPostgresJsExecutor`/
 `createNodeSqliteExecutor` depending on which Drizzle driver you're using —
 `$client` is always the native driver instance underneath.
 
-**mssql (SQL Server)** (no dedicated adapter — `mssql` binds parameters by
-name rather than by position, so the executor needs a couple of extra lines)
+**mssql (SQL Server)**
 
 ```ts
 import sql from 'mssql';
+import { createMssqlExecutor } from '@owlsql/core/mssql';
+
 const pool = await sql.connect({ /* ... */ });
-const db = createTypedDb<DB>(async (query, params) => {
-  const request = pool.request();
-  params.forEach((value, index) => request.input(`p${index + 1}`, value));
-  const result = await request.query(query);
-  return result.recordset;
-});
+const db = createTypedDb<DB>(createMssqlExecutor(pool));
 ```
 
-`mssql` binds named parameters (`request.input('name', value)`), so build the
-query with matching `@pN` placeholders — `Params<DB, Q>` still gives you a
-positional tuple typed against the query's `@` placeholders, in the order they
-appear.
+The adapter scans the query for `@name` placeholders (skipping string
+literals and `@@` system variables) and binds each one by name via
+`request.input(...)`, in order of first appearance — matching how
+`Params<DB, Q>` types the positional tuple. A repeated `@name` binds once.
 
 ## Database support
 

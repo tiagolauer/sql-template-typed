@@ -1,11 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { Executor } from '../index.js';
+import { collectNamedParameters } from './named-params.js';
 
 type SqliteParam = null | number | bigint | string | NodeJS.ArrayBufferView;
 
-const NAMED_PARAM_PREFIXES = new Set(['@', '$', ':']);
-
-const NAMED_PARAM_BODY = /^[A-Za-z0-9_]+/;
+const SQLITE_PARAM_PREFIXES: ReadonlySet<string> = new Set(['@', '$', ':']);
 
 function toSqliteValue(value: unknown): SqliteParam {
   if (typeof value === 'boolean') {
@@ -20,41 +19,11 @@ function toSqliteValue(value: unknown): SqliteParam {
   return value as SqliteParam;
 }
 
-export function collectNamedParameters(sql: string): string[] {
-  const names: string[] = [];
-  let insideLiteral = false;
-
-  for (let index = 0; index < sql.length; index += 1) {
-    const char = sql[index] as string;
-
-    if (char === "'") {
-      insideLiteral = !insideLiteral;
-      continue;
-    }
-    if (insideLiteral) {
-      continue;
-    }
-
-    if (NAMED_PARAM_PREFIXES.has(char)) {
-      const body = NAMED_PARAM_BODY.exec(sql.slice(index + 1));
-      if (body) {
-        const name = `${char}${body[0]}`;
-        if (!names.includes(name)) {
-          names.push(name);
-        }
-        index += body[0].length;
-      }
-    }
-  }
-
-  return names;
-}
-
 export function createNodeSqliteExecutor(db: DatabaseSync): Executor {
   return async (sql, params) => {
     const statement = db.prepare(sql);
     const values = params.map(toSqliteValue);
-    const namedParameters = collectNamedParameters(sql);
+    const namedParameters = collectNamedParameters(sql, SQLITE_PARAM_PREFIXES);
 
     if (namedParameters.length > 0) {
       const bag: Record<string, SqliteParam> = {};
