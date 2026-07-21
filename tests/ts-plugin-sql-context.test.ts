@@ -55,7 +55,37 @@ describe('getWhereClauseContext', () => {
   });
 });
 
+describe('context misfire guards', () => {
+  it('offers no completions inside a string literal value', () => {
+    expect(getWhereClauseContext("select id from users where name = 'al")).toBeNull();
+    expect(getSelectListContext("select 'par")).toBeNull();
+  });
+
+  it('ignores a quoted from keyword when deciding the select-list context', () => {
+    expect(getSelectListContext("select 'from users', na")).toEqual({ prefix: 'na' });
+  });
+
+  it('returns null while the cursor trails a numeric token', () => {
+    expect(getWhereClauseContext('select id from users where id = 12')).toBeNull();
+  });
+
+  it('offers columns after ORDER BY and GROUP BY without a WHERE clause', () => {
+    expect(getWhereClauseContext('select id from users order by na')).toEqual({ prefix: 'na' });
+    expect(getWhereClauseContext('select id from users group by ')).toEqual({ prefix: '' });
+  });
+
+  it('offers columns in JOIN ... ON conditions', () => {
+    expect(getWhereClauseContext('select id from users u join posts p on u.')).toEqual({
+      prefix: '',
+    });
+  });
+});
+
 describe('findFromTable', () => {
+  it('ignores a quoted from keyword inside a literal', () => {
+    expect(findFromTable("select 'x from fake' , id from users")).toBe('users');
+  });
+
   it('finds the table name after FROM', () => {
     expect(findFromTable('select id, name from users')).toBe('users');
   });

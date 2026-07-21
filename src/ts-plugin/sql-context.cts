@@ -1,7 +1,7 @@
 const SELECT_START = /^select\b/i;
 const HAS_FROM = /\bfrom\b/i;
-const HAS_WHERE = /\bwhere\b/i;
-const TRAILING_WORD = /([A-Za-z_][A-Za-z0-9_]*)$/;
+const HAS_COLUMN_CLAUSE = /\b(where|having|on|order\s+by|group\s+by)\b/i;
+const TRAILING_TOKEN = /([A-Za-z0-9_]+)$/;
 const FROM_TABLE = /\bfrom\s+(?:[A-Za-z_][A-Za-z0-9_]*\.)?([A-Za-z_][A-Za-z0-9_]*)/i;
 const WORD_CHAR = /[A-Za-z0-9_]/;
 const WORD_START_CHAR = /[A-Za-z_]/;
@@ -16,36 +16,77 @@ interface WordAtOffset {
   end: number;
 }
 
+interface StrippedText {
+  stripped: string;
+  insideLiteral: boolean;
+}
+
+function stripStringLiterals(text: string): StrippedText {
+  let stripped = '';
+  let insideLiteral = false;
+
+  for (const char of text) {
+    if (char === "'") {
+      insideLiteral = !insideLiteral;
+      stripped += char;
+      continue;
+    }
+    if (!insideLiteral) {
+      stripped += char;
+    }
+  }
+
+  return { stripped, insideLiteral };
+}
+
+function prefixFrom(textBeforeCursor: string): SelectListContext | null {
+  const token = TRAILING_TOKEN.exec(textBeforeCursor)?.[1];
+  if (token === undefined) {
+    return { prefix: '' };
+  }
+  if (!WORD_START_CHAR.test(token[0] ?? '')) {
+    return null;
+  }
+  return { prefix: token };
+}
+
 function getSelectListContext(textBeforeCursor: string): SelectListContext | null {
-  const trimmed = textBeforeCursor.trimStart();
-
-  if (!SELECT_START.test(trimmed)) {
+  const { stripped, insideLiteral } = stripStringLiterals(textBeforeCursor);
+  if (insideLiteral) {
     return null;
   }
 
-  if (HAS_FROM.test(textBeforeCursor)) {
+  if (!SELECT_START.test(stripped.trimStart())) {
     return null;
   }
 
-  const match = TRAILING_WORD.exec(textBeforeCursor);
-  return { prefix: match?.[1] ?? '' };
+  if (HAS_FROM.test(stripped)) {
+    return null;
+  }
+
+  return prefixFrom(textBeforeCursor);
 }
 
 function getWhereClauseContext(textBeforeCursor: string): SelectListContext | null {
-  if (!HAS_FROM.test(textBeforeCursor)) {
+  const { stripped, insideLiteral } = stripStringLiterals(textBeforeCursor);
+  if (insideLiteral) {
     return null;
   }
 
-  if (!HAS_WHERE.test(textBeforeCursor)) {
+  if (!HAS_FROM.test(stripped)) {
     return null;
   }
 
-  const match = TRAILING_WORD.exec(textBeforeCursor);
-  return { prefix: match?.[1] ?? '' };
+  if (!HAS_COLUMN_CLAUSE.test(stripped)) {
+    return null;
+  }
+
+  return prefixFrom(textBeforeCursor);
 }
 
 function findFromTable(fullLiteralText: string): string | null {
-  const match = FROM_TABLE.exec(fullLiteralText);
+  const { stripped } = stripStringLiterals(fullLiteralText);
+  const match = FROM_TABLE.exec(stripped);
   return match?.[1] ?? null;
 }
 
