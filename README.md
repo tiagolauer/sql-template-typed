@@ -38,6 +38,7 @@ No install, no database — see [`examples/playground`](examples/playground).
   - [8. Strict mode — turn typos into type errors](#8-strict-mode--turn-typos-into-type-errors)
   - [9. Joins](#9-joins)
   - [10. Typed parameters](#10-typed-parameters)
+  - [11. Transactions](#11-transactions)
 - [Driver recipes](#driver-recipes)
 - [Database support](#database-support)
 - [Editor autocomplete](#editor-autocomplete)
@@ -451,6 +452,48 @@ across joins (`where p.views > $1` resolves against the aliased table). Use the
 For this to work, write the comparison **with spaces around the operator**
 (`id = $1`, not `id=$1`) — that is what lets the compiler see the column,
 operator, and placeholder as separate tokens.
+
+### 11. Transactions
+
+There is no built-in transaction API yet — and there is a footgun to know
+about: **never run `BEGIN`/`COMMIT` through an executor bound to a pool.**
+Each `query()` may check out a *different* connection, so `BEGIN` runs on
+connection A and `COMMIT` on connection B, leaving an open transaction (and
+its locks) on a pooled connection that is later handed to another caller.
+
+The adapters accept anything with the right `query`/`execute` shape — a
+`pg.Pool`, `pg.Client` or `pg.PoolClient`; a mysql2 `Pool` or `Connection` —
+so pin one connection and scope a client to it:
+
+```ts
+import { Pool } from 'pg';
+import { createTypedDb } from '@owlsql/core';
+import { createPgExecutor } from '@owlsql/core/pg';
+
+const pool = new Pool();
+
+async function transferFunds(from: number, to: number, amount: number) {
+  const client = await pool.connect();
+  const tx = createTypedDb<DB>(createPgExecutor(client));
+
+  try {
+    await client.query('begin');
+    await tx.query('update accounts set balance = balance - $1 where id = $2', amount, from);
+    await tx.query('update accounts set balance = balance + $1 where id = $2', amount, to);
+    await client.query('commit');
+  } catch (error) {
+    await client.query('rollback');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+```
+
+postgres.js has its own `sql.begin(...)` — build the executor from the
+transaction-scoped `sql` it hands you. Kysely users should use Kysely's
+`db.transaction()`. `node:sqlite` is a single connection, so plain
+`begin`/`commit` statements are safe there.
 
 ## Driver recipes
 

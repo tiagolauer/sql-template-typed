@@ -1,6 +1,6 @@
 import type { Executor } from '../src/index.js';
-import type { Pool as PgPool } from 'pg';
-import type { Pool as Mysql2Pool } from 'mysql2/promise';
+import type { Pool as PgPool, Client as PgClient, PoolClient as PgPoolClient } from 'pg';
+import type { Pool as Mysql2Pool, Connection as Mysql2Connection } from 'mysql2/promise';
 import type postgres from 'postgres';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Kysely } from 'kysely';
@@ -39,7 +39,10 @@ type KyselyExecutorMatchesShape = Expect<
 
 export function adapterCallSites() {
   createPgExecutor({} as PgPool);
+  createPgExecutor({} as PgClient);
+  createPgExecutor({} as PgPoolClient);
   createMysql2Executor({} as Mysql2Pool);
+  createMysql2Executor({} as Mysql2Connection);
   createPostgresJsExecutor({} as postgres.Sql);
   createNodeSqliteExecutor({} as DatabaseSync);
   createKyselyExecutor({} as Kysely<{ users: { id: number } }>);
