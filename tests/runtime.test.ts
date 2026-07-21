@@ -8,7 +8,7 @@ import {
   ok,
   err,
   type Executor,
-} from '../src/index';
+} from '../src/index.js';
 
 interface DB {
   users: { id: number; name: string };

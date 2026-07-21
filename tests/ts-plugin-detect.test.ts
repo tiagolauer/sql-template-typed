@@ -35,6 +35,17 @@ describe('matchQueryLiteral', () => {
     expect(match).not.toBeNull();
   });
 
+  it('detects a plain double-quoted string literal query', () => {
+    const match = run(`
+      import type { TypedDb } from '@owlsql/core';
+      interface DB { users: { id: number } }
+      declare const db: TypedDb<DB>;
+      db.query("select 1");
+    `);
+
+    expect(match).not.toBeNull();
+  });
+
   it('does not match when the cursor sits after the closing backtick', () => {
     const match = run(
       `

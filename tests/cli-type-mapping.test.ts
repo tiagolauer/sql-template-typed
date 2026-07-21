@@ -68,6 +68,11 @@ describe('mapMysqlType', () => {
     expect(mapMysqlType('tinyint', 'tinyint(4)')).toBe('number');
   });
 
+  it('maps bit(1) to boolean but wider bit fields to Buffer', () => {
+    expect(mapMysqlType('bit', 'bit(1)')).toBe('boolean');
+    expect(mapMysqlType('bit', 'bit(8)')).toBe('Buffer');
+  });
+
   it('maps date/time types and binary types', () => {
     expect(mapMysqlType('datetime', 'datetime')).toBe('Date');
     expect(mapMysqlType('time', 'time')).toBe('string');
@@ -95,6 +100,12 @@ describe('mapSqliteType', () => {
     expect(mapSqliteType('NUMERIC')).toBe('number');
     expect(mapSqliteType('DECIMAL(10,2)')).toBe('number');
   });
+
+  it('accepts lowercase declared types', () => {
+    expect(mapSqliteType('integer')).toBe('number');
+    expect(mapSqliteType('text')).toBe('string');
+    expect(mapSqliteType('boolean')).toBe('0 | 1');
+  });
 });
 
 describe('mapMssqlType', () => {
@@ -119,5 +130,9 @@ describe('mapMssqlType', () => {
   it('is case-insensitive and falls back to unknown', () => {
     expect(mapMssqlType('INT')).toBe('number');
     expect(mapMssqlType('geography')).toBe('unknown');
+  });
+
+  it('maps time to Date, matching tedious defaults', () => {
+    expect(mapMssqlType('time')).toBe('Date');
   });
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { createTypedDb, isOk } from '../src/index';
-import { createNodeSqliteExecutor } from '../src/adapters/node-sqlite';
+import { createTypedDb, isOk } from '../src/index.js';
+import { createNodeSqliteExecutor } from '../src/adapters/node-sqlite.js';
 import { loadSqlite, sqliteAvailable } from './sqlite-availability.js';
 
 interface DB {
