@@ -152,12 +152,13 @@ function init(modules: { typescript: typeof ts }) {
         }
 
         const literalStart = match.literal.getStart(sourceFile) + 1;
-        const word = getWordAtOffset(match.literal.text, position - literalStart);
+        const rawLiteralText = sourceFile.text.slice(literalStart, match.literal.getEnd() - 1);
+        const word = getWordAtOffset(rawLiteralText, position - literalStart);
         if (!word) {
           return native();
         }
 
-        const table = findFromTable(match.literal.text);
+        const table = findFromTable(rawLiteralText);
         const columnType = getColumnType(checker, match.dbType, match.literal, table, word.word);
         if (!columnType) {
           return native();

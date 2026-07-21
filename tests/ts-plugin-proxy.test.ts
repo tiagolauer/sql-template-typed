@@ -1,39 +1,9 @@
 import { afterAll, describe, expect, it, vi } from 'vitest';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
+import { rmSync } from 'node:fs';
 import ts from 'typescript';
+import { loadPlugin } from './ts-plugin-test-helpers.js';
 
-const PLUGIN_DIR = join(fileURLToPath(new URL('.', import.meta.url)), '..', 'src', 'ts-plugin');
-
-const PLUGIN_MODULES = ['index.cts', 'sql-context.cts', 'schema.cts', 'detect.cts'];
-
-type PluginFactory = (modules: { typescript: typeof ts }) => {
-  create(info: unknown): ts.LanguageService;
-};
-
-const transpileDir = mkdtempSync(join(tmpdir(), 'owlsql-ts-plugin-proxy-'));
-
-function loadPlugin(): PluginFactory {
-  for (const moduleName of PLUGIN_MODULES) {
-    const source = readFileSync(join(PLUGIN_DIR, moduleName), 'utf8');
-    const output = ts.transpileModule(source, {
-      compilerOptions: {
-        module: ts.ModuleKind.CommonJS,
-        target: ts.ScriptTarget.ES2022,
-      },
-      fileName: moduleName,
-    }).outputText;
-    writeFileSync(join(transpileDir, moduleName.replace('.cts', '.cjs')), output);
-  }
-
-  const requireCompiled = createRequire(import.meta.url);
-  return requireCompiled(join(transpileDir, 'index.cjs')) as PluginFactory;
-}
-
-const plugin = loadPlugin();
+const { plugin, dir: transpileDir } = loadPlugin();
 
 afterAll(() => {
   rmSync(transpileDir, { recursive: true, force: true });
