@@ -51,7 +51,17 @@ function init(modules: { typescript: typeof ts }) {
         const fullLiteralText = match.literal.text;
         const table = findFromTable(fullLiteralText);
         const columns = getColumnNames(checker, match.dbType, match.literal, table);
-        const filtered = columns.filter((name) => name.startsWith(context.prefix));
+        const prefix = context.prefix.toLowerCase();
+        const filtered = columns.filter((name) => name.toLowerCase().startsWith(prefix));
+
+        if (filtered.length === 0) {
+          return native();
+        }
+
+        const replacementSpan = {
+          start: position - context.prefix.length,
+          length: context.prefix.length,
+        };
 
         return {
           isGlobalCompletion: false,
@@ -61,6 +71,7 @@ function init(modules: { typescript: typeof ts }) {
             name,
             kind: typescript.ScriptElementKind.memberVariableElement,
             sortText: '0',
+            replacementSpan,
           })),
         };
       } catch {
@@ -69,6 +80,60 @@ function init(modules: { typescript: typeof ts }) {
     };
 
     proxy.getCompletionsAtPosition = getCompletionsAtPosition;
+
+    const getCompletionEntryDetails: ts.LanguageService['getCompletionEntryDetails'] = (
+      fileName,
+      position,
+      entryName,
+      formatOptions,
+      source,
+      preferences,
+      data,
+    ) => {
+      const native = () =>
+        info.languageService.getCompletionEntryDetails(
+          fileName,
+          position,
+          entryName,
+          formatOptions,
+          source,
+          preferences,
+          data,
+        );
+
+      try {
+        const program = info.languageService.getProgram();
+        const sourceFile = program?.getSourceFile(fileName);
+        if (!program || !sourceFile) {
+          return native();
+        }
+
+        const checker = program.getTypeChecker();
+        const match = matchQueryLiteral(typescript, checker, sourceFile, position);
+        if (!match) {
+          return native();
+        }
+
+        const table = findFromTable(match.literal.text);
+        const columnType = getColumnType(checker, match.dbType, match.literal, table, entryName);
+        if (!columnType) {
+          return native();
+        }
+
+        return {
+          name: entryName,
+          kind: typescript.ScriptElementKind.memberVariableElement,
+          kindModifiers: '',
+          displayParts: [
+            { text: `(column) ${entryName}: ${checker.typeToString(columnType)}`, kind: 'text' },
+          ],
+        };
+      } catch {
+        return native();
+      }
+    };
+
+    proxy.getCompletionEntryDetails = getCompletionEntryDetails;
 
     const getQuickInfoAtPosition: ts.LanguageService['getQuickInfoAtPosition'] = (fileName, position) => {
       const native = () => info.languageService.getQuickInfoAtPosition(fileName, position);

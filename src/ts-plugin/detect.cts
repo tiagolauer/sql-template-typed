@@ -13,7 +13,7 @@ function findNodeAtPosition(typescript: TypeScript, sourceFile: ts.SourceFile, p
   let best: ts.Node = sourceFile;
 
   const visit = (node: ts.Node): void => {
-    if (position < node.getFullStart() || position > node.getEnd()) {
+    if (position < node.getFullStart() || position >= node.getEnd()) {
       return;
     }
 
