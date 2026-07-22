@@ -9,13 +9,19 @@ const REPO_ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..');
 
 const PLUGIN_DIR = join(REPO_ROOT, 'src', 'ts-plugin');
 
-const PLUGIN_MODULES = ['index.cts', 'sql-context.cts', 'schema.cts', 'detect.cts'];
+const PLUGIN_MODULES = [
+  'index.cts',
+  'sql-context.cts',
+  'schema.cts',
+  'detect.cts',
+  'diagnostics.cts',
+];
 
 export type PluginFactory = (modules: { typescript: typeof ts }) => {
   create(info: unknown): ts.LanguageService;
 };
 
-export function loadPlugin(): { plugin: PluginFactory; dir: string } {
+function transpilePluginModules(): string {
   const dir = mkdtempSync(join(tmpdir(), 'owlsql-ts-plugin-build-'));
 
   for (const moduleName of PLUGIN_MODULES) {
@@ -30,8 +36,21 @@ export function loadPlugin(): { plugin: PluginFactory; dir: string } {
     writeFileSync(join(dir, moduleName.replace('.cts', '.cjs')), output);
   }
 
+  return dir;
+}
+
+export function loadPlugin(): { plugin: PluginFactory; dir: string } {
+  const dir = transpilePluginModules();
   const requireCompiled = createRequire(import.meta.url);
   return { plugin: requireCompiled(join(dir, 'index.cjs')) as PluginFactory, dir };
+}
+
+export type DiagnosticsModule = typeof import('../src/ts-plugin/diagnostics.cts');
+
+export function loadDiagnostics(): { diagnostics: DiagnosticsModule; dir: string } {
+  const dir = transpilePluginModules();
+  const requireCompiled = createRequire(import.meta.url);
+  return { diagnostics: requireCompiled(join(dir, 'diagnostics.cjs')) as DiagnosticsModule, dir };
 }
 
 export function buildLanguageService(

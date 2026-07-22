@@ -54,6 +54,13 @@ type PlainParenthesizedExpressionIsUnaffected = Expect<
   Equal<Query<DB, 'select (views * 2) as total, id from posts'>, { total: unknown; id: number }[]>
 >;
 
+type StrictModeRejectsMultiColumnSubquery = Expect<
+  Equal<
+    StrictQuery<DB, 'select (select id, views from posts) as bad from users'>,
+    QueryTypeError<'scalar subquery must select exactly one column'>[]
+  >
+>;
+
 export type ScalarSubqueryLock = [
   ScalarSubqueryFromTheIssueExample,
   ScalarSubqueryAliasedColumnFromInnerTable,
@@ -61,4 +68,5 @@ export type ScalarSubqueryLock = [
   MultiColumnSubqueryFallsBackToUnknown,
   StrictModeSurfacesTheInnerColumnError,
   PlainParenthesizedExpressionIsUnaffected,
+  StrictModeRejectsMultiColumnSubquery,
 ];

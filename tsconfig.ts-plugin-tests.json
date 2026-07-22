@@ -23,6 +23,7 @@
     "tests/ts-plugin-schema.test.ts",
     "tests/ts-plugin-proxy.test.ts",
     "tests/ts-plugin-hover-crlf.test.ts",
+    "tests/ts-plugin-diagnostics.test.ts",
     "tests/ts-plugin-test-helpers.ts"
   ]
 }

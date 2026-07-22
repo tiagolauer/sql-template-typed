@@ -3,12 +3,22 @@ import type { SchemaLike, Source, ResolveColumnType } from './parse.js';
 
 export type IsCaseExpression<Expr extends string> = IsKeyword<FirstWord<Trim<Expr>>, 'case'>;
 
-type FindEnd<S extends string, Accumulated extends string = ''> = S extends `${infer Head} ${infer Tail}`
-  ? IsKeyword<Head, 'end'> extends true
-    ? { body: Trim<Accumulated>; rest: Trim<Tail> }
-    : FindEnd<Tail, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
+type FindEnd<
+  S extends string,
+  Depth extends unknown[] = [],
+  Accumulated extends string = '',
+> = S extends `${infer Head} ${infer Tail}`
+  ? IsKeyword<Head, 'case'> extends true
+    ? FindEnd<Tail, [...Depth, unknown], Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
+    : IsKeyword<Head, 'end'> extends true
+      ? Depth extends [unknown, ...infer DepthRest extends unknown[]]
+        ? FindEnd<Tail, DepthRest, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
+        : { body: Trim<Accumulated>; rest: Trim<Tail> }
+      : FindEnd<Tail, Depth, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
   : IsKeyword<S, 'end'> extends true
-    ? { body: Trim<Accumulated>; rest: '' }
+    ? Depth extends []
+      ? { body: Trim<Accumulated>; rest: '' }
+      : never
     : never;
 
 export type SplitCaseExpression<Expr extends string> = DropFirstWord<Trim<Expr>> extends infer AfterCase extends string
@@ -31,14 +41,23 @@ type ScanCaseSegments<
   CurrentKind extends 'when' | 'then' | 'else',
   CurrentText extends string,
   Accumulated extends CaseSegment[],
+  Depth extends unknown[] = [],
 > = S extends `${infer Head} ${infer Tail}`
-  ? IsKeyword<Head, 'when'> extends true
-    ? ScanCaseSegments<Tail, 'when', '', [...Accumulated, { kind: CurrentKind; text: Trim<CurrentText> }]>
-    : IsKeyword<Head, 'then'> extends true
-      ? ScanCaseSegments<Tail, 'then', '', [...Accumulated, { kind: CurrentKind; text: Trim<CurrentText> }]>
-      : IsKeyword<Head, 'else'> extends true
-        ? ScanCaseSegments<Tail, 'else', '', [...Accumulated, { kind: CurrentKind; text: Trim<CurrentText> }]>
-        : ScanCaseSegments<Tail, CurrentKind, CurrentText extends '' ? Head : `${CurrentText} ${Head}`, Accumulated>
+  ? IsKeyword<Head, 'case'> extends true
+    ? ScanCaseSegments<Tail, CurrentKind, CurrentText extends '' ? Head : `${CurrentText} ${Head}`, Accumulated, [...Depth, unknown]>
+    : IsKeyword<Head, 'end'> extends true
+      ? Depth extends [unknown, ...infer DepthRest extends unknown[]]
+        ? ScanCaseSegments<Tail, CurrentKind, CurrentText extends '' ? Head : `${CurrentText} ${Head}`, Accumulated, DepthRest>
+        : ScanCaseSegments<Tail, CurrentKind, CurrentText extends '' ? Head : `${CurrentText} ${Head}`, Accumulated, Depth>
+      : Depth extends []
+        ? IsKeyword<Head, 'when'> extends true
+          ? ScanCaseSegments<Tail, 'when', '', [...Accumulated, { kind: CurrentKind; text: Trim<CurrentText> }], Depth>
+          : IsKeyword<Head, 'then'> extends true
+            ? ScanCaseSegments<Tail, 'then', '', [...Accumulated, { kind: CurrentKind; text: Trim<CurrentText> }], Depth>
+            : IsKeyword<Head, 'else'> extends true
+              ? ScanCaseSegments<Tail, 'else', '', [...Accumulated, { kind: CurrentKind; text: Trim<CurrentText> }], Depth>
+              : ScanCaseSegments<Tail, CurrentKind, CurrentText extends '' ? Head : `${CurrentText} ${Head}`, Accumulated, Depth>
+        : ScanCaseSegments<Tail, CurrentKind, CurrentText extends '' ? Head : `${CurrentText} ${Head}`, Accumulated, Depth>
   : [...Accumulated, { kind: CurrentKind; text: Trim<CurrentText extends '' ? S : `${CurrentText} ${S}`> }];
 
 type HasElseBranch<Segments extends CaseSegment[]> = Segments extends [

@@ -693,22 +693,26 @@ pick up `tsconfig.json` plugins automatically.
 **What it does:** suggests column names right after `SELECT`/a comma in the
 column list or after `WHERE`/`AND`/`OR`, and shows a column's resolved type
 on hover, for `db.query(...)` calls made through a client built with
-`createTypedDb<DB>`. If a `FROM <table>` is already present anywhere later
-in the same string, completions and hover are scoped to that table;
-otherwise `SELECT`-list completions fall back to the deduplicated union of
-every table's columns in `DB` — which is exactly what covers the example
-above before you've typed `FROM` at all. `WHERE`-position completions
-require a `FROM` to already be present (there's no table to scope to
-otherwise).
+`createTypedDb<DB>`. It is `JOIN`/alias-aware: every table introduced by a
+`FROM` or `JOIN` in the same string is in scope, and typing an alias
+qualifier (`u.` in `... from users u`) narrows completions and hover to that
+one source. With no qualifier, completions/hover union columns across all
+sources present so far — the deduplicated union of every table in `DB` before
+any `FROM` is typed at all, exactly what covers the example above. `WHERE`-
+position completions require a `FROM` to already be present (there's no
+table to scope to otherwise). It also reports unknown columns, unknown
+tables, unknown aliases, and ambiguous unqualified columns (present in more
+than one joined table) as live editor diagnostics in the `SELECT` list and
+`FROM`/`JOIN` clause — the same checks strict mode (`{ strict: true }`)
+applies at compile time, surfaced as a squiggle while you type instead of
+only once the query is finished.
 
 **What it does not do** (documented scope, not bugs):
 
-- No inline diagnostics/squiggles for unknown columns or tables — hover
-  and completions only. Strict mode (`{ strict: true }`) still catches
-  these as a compile-time `QueryTypeError`, just not as a live squiggle.
-- No `JOIN`/alias awareness — only the first `FROM <table>` in the string is
-  used to scope both completions and hover; a second table from a `JOIN` is
-  not offered.
+- No diagnostics for the `WHERE` clause or other expressions — only the
+  `SELECT` list and `FROM`/`JOIN` table names are checked, matching what the
+  type-level parser itself validates (`WHERE` is scanned only for
+  parameter placeholders, never typed).
 - No table-name completions after `FROM`/`JOIN` — only column names, after
   `SELECT`/`WHERE`, are suggested.
 - The first `FROM <table>` is found with a regex, not a real SQL parser: a
@@ -830,12 +834,14 @@ This is a focused tool for the common read path, not a full SQL grammar:
   that column's type, with `| null` added since a scalar subquery yields
   NULL on zero rows (`count(...)` subqueries are exempt — they always
   return a row). A subquery selecting more than one column resolves to
-  `unknown` rather than picking one arbitrarily. Subqueries used as a value
-  inside `WHERE` are not typed at all (`WHERE` isn't part of the typed
-  structure — only scanned for parameter placeholders).
-- **`CASE` does not support nested `CASE`.** The parser looks for the first
-  top-level `END`; a `CASE` nested inside another `CASE`'s branch is not
-  supported.
+  `unknown` in normal mode (rather than picking one arbitrarily) and to a
+  `QueryTypeError` in strict mode, since selecting more than one column
+  from a scalar subquery is invalid SQL. Subqueries used as a value inside
+  `WHERE` are not typed at all (`WHERE` isn't part of the typed structure —
+  only scanned for parameter placeholders).
+- **Nested `CASE` is supported** — a `CASE` expression inside another
+  `CASE`'s `WHEN`/`THEN`/`ELSE` branch is parsed and typed like any other
+  branch expression.
 - **Window `OVER (...)` clauses are only used as a boundary**, not parsed for
   their own typing — `PARTITION BY`/`ORDER BY` content inside `OVER (...)` is
   discarded, not validated.
@@ -850,11 +856,11 @@ This is a focused tool for the common read path, not a full SQL grammar:
   `where id=$1` is not. `INSERT ... VALUES` parameters are matched
   positionally against the INSERT's column list — `insert into t (a, b)
   values ($1, $2)` types `$1`/`$2` as `a`/`b`; without an explicit column
-  list they fall back to a flexible `unknown[]`. A query's own `WITH` CTE
-  bodies can't have their placeholders typed, and if one contains a
-  parameter the whole query falls back to `unknown[]` rather than silently
-  dropping that parameter — placeholders in the outer query (referencing a
-  CTE by name) are unaffected either way. Numbered placeholders bind by
+  list they fall back to a flexible `unknown[]`. Placeholders inside a
+  `WITH` CTE's own body are typed against that CTE's own `FROM` source (and
+  earlier CTEs it references), in the same textual order they appear in the
+  query, ahead of placeholders in the outer query that follows the `WITH`
+  clause. Numbered placeholders bind by
   their index (`$2` fills the second tuple slot even when it appears first);
   a repeated `$n` occupies a single slot.
 - **Quoted identifiers** use `"..."` (standard), `[...]` (SQL Server), or

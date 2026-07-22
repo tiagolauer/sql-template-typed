@@ -2,10 +2,34 @@ import type * as ts from 'typescript/lib/tsserverlibrary';
 import sqlContext = require('./sql-context.cjs');
 import schemaModule = require('./schema.cjs');
 import detectModule = require('./detect.cjs');
+import diagnosticsModule = require('./diagnostics.cjs');
 
-const { getSelectListContext, getWhereClauseContext, findFromTable, getWordAtOffset } = sqlContext;
+const {
+  getSelectListContext,
+  getWhereClauseContext,
+  findSources,
+  findSourceByAlias,
+  getQualifierBefore,
+  getWordAtOffset,
+} = sqlContext;
 const { getColumnNames, getColumnType } = schemaModule;
-const { matchQueryLiteral } = detectModule;
+const { matchQueryLiteral, findAllQueryLiterals } = detectModule;
+const { getQueryDiagnostics } = diagnosticsModule;
+
+const OWLSQL_DIAGNOSTIC_SOURCE = 'owlsql';
+const OWLSQL_DIAGNOSTIC_CODE = 990001;
+
+function resolveTableScope(
+  sources: ReturnType<typeof findSources>,
+  qualifier: string | null,
+): string | string[] | null {
+  if (qualifier) {
+    const source = findSourceByAlias(sources, qualifier);
+    return source ? source.table : [];
+  }
+
+  return sources.length > 0 ? sources.map((source) => source.table) : null;
+}
 
 function init(modules: { typescript: typeof ts }) {
   const typescript = modules.typescript;
@@ -49,7 +73,8 @@ function init(modules: { typescript: typeof ts }) {
         }
 
         const fullLiteralText = match.literal.text;
-        const table = findFromTable(fullLiteralText);
+        const sources = findSources(fullLiteralText);
+        const table = resolveTableScope(sources, context.qualifier);
         const columns = getColumnNames(checker, match.dbType, match.literal, table);
         const prefix = context.prefix.toLowerCase();
         const filtered = columns.filter((name) => name.toLowerCase().startsWith(prefix));
@@ -114,7 +139,7 @@ function init(modules: { typescript: typeof ts }) {
           return native();
         }
 
-        const table = findFromTable(match.literal.text);
+        const table = resolveTableScope(findSources(match.literal.text), null);
         const columnType = getColumnType(checker, match.dbType, match.literal, table, entryName);
         if (!columnType) {
           return native();
@@ -158,7 +183,8 @@ function init(modules: { typescript: typeof ts }) {
           return native();
         }
 
-        const table = findFromTable(rawLiteralText);
+        const qualifier = getQualifierBefore(rawLiteralText, word.start);
+        const table = resolveTableScope(findSources(rawLiteralText), qualifier);
         const columnType = getColumnType(checker, match.dbType, match.literal, table, word.word);
         if (!columnType) {
           return native();
@@ -178,6 +204,42 @@ function init(modules: { typescript: typeof ts }) {
     };
 
     proxy.getQuickInfoAtPosition = getQuickInfoAtPosition;
+
+    const getSemanticDiagnostics: ts.LanguageService['getSemanticDiagnostics'] = (fileName) => {
+      const native = info.languageService.getSemanticDiagnostics(fileName);
+
+      try {
+        const program = info.languageService.getProgram();
+        const sourceFile = program?.getSourceFile(fileName);
+        if (!program || !sourceFile) {
+          return native;
+        }
+
+        const checker = program.getTypeChecker();
+        const matches = findAllQueryLiterals(typescript, checker, sourceFile);
+        const extra: ts.Diagnostic[] = [];
+
+        for (const match of matches) {
+          for (const span of getQueryDiagnostics(checker, match.dbType, match.literal)) {
+            extra.push({
+              file: sourceFile,
+              start: span.start,
+              length: span.length,
+              messageText: span.message,
+              category: typescript.DiagnosticCategory.Warning,
+              code: OWLSQL_DIAGNOSTIC_CODE,
+              source: OWLSQL_DIAGNOSTIC_SOURCE,
+            });
+          }
+        }
+
+        return extra.length === 0 ? native : [...native, ...extra];
+      } catch {
+        return native;
+      }
+    };
+
+    proxy.getSemanticDiagnostics = getSemanticDiagnostics;
 
     return proxy as unknown as ts.LanguageService;
   }

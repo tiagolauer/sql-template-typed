@@ -2,20 +2,21 @@ import type * as ts from 'typescript';
 
 function scopeToTable(
   tableSymbols: ts.Symbol[],
-  onlyTable: string | null,
+  onlyTable: string | string[] | null,
 ): ts.Symbol[] {
   if (!onlyTable) {
     return tableSymbols;
   }
 
-  return tableSymbols.filter((symbol) => symbol.getName() === onlyTable);
+  const wanted = new Set(Array.isArray(onlyTable) ? onlyTable : [onlyTable]);
+  return tableSymbols.filter((symbol) => wanted.has(symbol.getName()));
 }
 
 function getColumnNames(
   checker: ts.TypeChecker,
   dbType: ts.Type,
   node: ts.Node,
-  onlyTable: string | null,
+  onlyTable: string | string[] | null,
 ): string[] {
   const tables = scopeToTable(dbType.getProperties(), onlyTable);
 
@@ -35,7 +36,7 @@ function getColumnType(
   checker: ts.TypeChecker,
   dbType: ts.Type,
   node: ts.Node,
-  onlyTable: string | null,
+  onlyTable: string | string[] | null,
   columnName: string,
 ): ts.Type | null {
   const tables = scopeToTable(dbType.getProperties(), onlyTable);

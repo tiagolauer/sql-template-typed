@@ -1,13 +1,42 @@
 const SELECT_START = /^select\b/i;
 const HAS_FROM = /\bfrom\b/i;
 const HAS_COLUMN_CLAUSE = /\b(where|having|on|order\s+by|group\s+by)\b/i;
-const TRAILING_TOKEN = /([A-Za-z0-9_]+)$/;
+const QUALIFIED_TRAILING_TOKEN = /(?:([A-Za-z_][A-Za-z0-9_]*)\.)?([A-Za-z0-9_]*)$/;
 const FROM_TABLE = /\bfrom\s+(?:[A-Za-z_][A-Za-z0-9_]*\.)?([A-Za-z_][A-Za-z0-9_]*)/i;
+const FROM_OR_JOIN_SOURCE = /\b(from|join)\s+(?:[A-Za-z_][A-Za-z0-9_]*\.)?([A-Za-z_][A-Za-z0-9_]*)(?:\s+(as\s+)?([A-Za-z_][A-Za-z0-9_]*))?/gid;
 const WORD_CHAR = /[A-Za-z0-9_]/;
 const WORD_START_CHAR = /[A-Za-z_]/;
 
+const RESERVED_AFTER_SOURCE = new Set([
+  'on',
+  'where',
+  'join',
+  'inner',
+  'left',
+  'right',
+  'full',
+  'outer',
+  'cross',
+  'group',
+  'order',
+  'having',
+  'limit',
+  'offset',
+  'union',
+  'set',
+  'as',
+]);
+
 interface SelectListContext {
   prefix: string;
+  qualifier: string | null;
+}
+
+interface QuerySource {
+  table: string;
+  alias: string;
+  tableStart: number;
+  tableEnd: number;
 }
 
 interface WordAtOffset {
@@ -31,23 +60,20 @@ function stripStringLiterals(text: string): StrippedText {
       stripped += char;
       continue;
     }
-    if (!insideLiteral) {
-      stripped += char;
-    }
+    stripped += !insideLiteral ? char : ' ';
   }
 
   return { stripped, insideLiteral };
 }
 
 function prefixFrom(textBeforeCursor: string): SelectListContext | null {
-  const token = TRAILING_TOKEN.exec(textBeforeCursor)?.[1];
-  if (token === undefined) {
-    return { prefix: '' };
-  }
-  if (!WORD_START_CHAR.test(token[0] ?? '')) {
+  const match = QUALIFIED_TRAILING_TOKEN.exec(textBeforeCursor);
+  const qualifier = match?.[1] ?? null;
+  const token = match?.[2] ?? '';
+  if (token !== '' && !WORD_START_CHAR.test(token[0] ?? '')) {
     return null;
   }
-  return { prefix: token };
+  return { prefix: token, qualifier };
 }
 
 function getSelectListContext(textBeforeCursor: string): SelectListContext | null {
@@ -90,6 +116,45 @@ function findFromTable(fullLiteralText: string): string | null {
   return match?.[1] ?? null;
 }
 
+function findSources(fullLiteralText: string): QuerySource[] {
+  const { stripped } = stripStringLiterals(fullLiteralText);
+  const sources: QuerySource[] = [];
+
+  FROM_OR_JOIN_SOURCE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = FROM_OR_JOIN_SOURCE.exec(stripped)) !== null) {
+    const table = match[2];
+    const tableSpan = (match as unknown as { indices?: Array<[number, number] | undefined> }).indices?.[2];
+    if (!table || !tableSpan) {
+      continue;
+    }
+    const rawAlias = match[4] ?? null;
+    const alias = rawAlias && !RESERVED_AFTER_SOURCE.has(rawAlias.toLowerCase()) ? rawAlias : table;
+    sources.push({ table, alias, tableStart: tableSpan[0], tableEnd: tableSpan[1] });
+  }
+
+  return sources;
+}
+
+function findSourceByAlias(sources: QuerySource[], alias: string): QuerySource | null {
+  const lowerAlias = alias.toLowerCase();
+  return sources.find((source) => source.alias.toLowerCase() === lowerAlias) ?? null;
+}
+
+function getQualifierBefore(text: string, wordStart: number): string | null {
+  if (text[wordStart - 1] !== '.') {
+    return null;
+  }
+
+  let start = wordStart - 1;
+  while (start > 0 && WORD_CHAR.test(text[start - 1] ?? '')) {
+    start -= 1;
+  }
+
+  const qualifier = text.slice(start, wordStart - 1);
+  return qualifier !== '' && WORD_START_CHAR.test(qualifier[0] ?? '') ? qualifier : null;
+}
+
 function getWordAtOffset(text: string, offset: number): WordAtOffset | null {
   if (offset < 0 || offset > text.length) {
     return null;
@@ -117,4 +182,13 @@ function getWordAtOffset(text: string, offset: number): WordAtOffset | null {
   return { word, start, end };
 }
 
-export = { getSelectListContext, getWhereClauseContext, findFromTable, getWordAtOffset };
+export = {
+  getSelectListContext,
+  getWhereClauseContext,
+  findFromTable,
+  findSources,
+  findSourceByAlias,
+  getQualifierBefore,
+  getWordAtOffset,
+  stripStringLiterals,
+};

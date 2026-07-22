@@ -56,6 +56,26 @@ type CaseWithUnknownColumnFallsBackToUnknown = Expect<
   >
 >;
 
+type NestedCase = Expect<
+  Equal<
+    Query<
+      DB,
+      "select case when active then case when age < 18 then 'minor' else 'adult' end else 'inactive' end as status from users"
+    >,
+    { status: string }[]
+  >
+>;
+
+type NestedCaseFollowedByOuterElse = Expect<
+  Equal<
+    Query<
+      DB,
+      "select case when active then 'yes' end as flag, case when age < 18 then case when name = 'x' then 1 else 2 end else 3 end as bracket from users"
+    >,
+    { flag: string | null; bracket: number }[]
+  >
+>;
+
 export type CaseLock = [
   CaseWithLiterals,
   CaseWithoutElseIsNullable,
@@ -63,4 +83,6 @@ export type CaseLock = [
   CaseWithColumnBranch,
   CaseWithoutAliasDefaultsToCase,
   CaseWithUnknownColumnFallsBackToUnknown,
+  NestedCase,
+  NestedCaseFollowedByOuterElse,
 ];

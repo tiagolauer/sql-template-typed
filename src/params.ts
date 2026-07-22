@@ -135,7 +135,7 @@ type AddParam<
       : never
   : never;
 
-type ScanParams<
+type ScanParamsRaw<
   S extends string,
   DB extends SchemaLike,
   Sources extends Source[],
@@ -149,21 +149,40 @@ type ScanParams<
         indexed: infer NextIndexed extends unknown[];
         sequential: infer NextSequential extends unknown[];
       }
-      ? ScanParams<Tail, DB, Sources, PrevPrev, Prev, NextIndexed, NextSequential>
+      ? ScanParamsRaw<Tail, DB, Sources, PrevPrev, Prev, NextIndexed, NextSequential>
       : never
     : IsTransparentToken<Head> extends true
-      ? ScanParams<Tail, DB, Sources, PrevPrev, Prev, Indexed, Sequential>
-      : ScanParams<Tail, DB, Sources, Prev, CleanColumnToken<Head>, Indexed, Sequential>
+      ? ScanParamsRaw<Tail, DB, Sources, PrevPrev, Prev, Indexed, Sequential>
+      : ScanParamsRaw<Tail, DB, Sources, Prev, CleanColumnToken<Head>, Indexed, Sequential>
   : S extends ''
-    ? [...Indexed, ...Sequential]
+    ? { indexed: Indexed; sequential: Sequential }
     : IsPlaceholder<S> extends true
-      ? AddParam<S, ParamType<DB, Sources, PrevPrev, Prev>, Indexed, Sequential> extends {
-          indexed: infer NextIndexed extends unknown[];
-          sequential: infer NextSequential extends unknown[];
-        }
-        ? [...NextIndexed, ...NextSequential]
-        : never
-      : [...Indexed, ...Sequential];
+      ? AddParam<S, ParamType<DB, Sources, PrevPrev, Prev>, Indexed, Sequential>
+      : { indexed: Indexed; sequential: Sequential };
+
+type ScanParams<
+  S extends string,
+  DB extends SchemaLike,
+  Sources extends Source[],
+  PrevPrev extends string = '',
+  Prev extends string = '',
+  Indexed extends unknown[] = [],
+  Sequential extends unknown[] = [],
+> = ScanParamsRaw<S, DB, Sources, PrevPrev, Prev, Indexed, Sequential> extends {
+  indexed: infer FinalIndexed extends unknown[];
+  sequential: infer FinalSequential extends unknown[];
+}
+  ? [...FinalIndexed, ...FinalSequential]
+  : never;
+
+type ZipIntersectIndexed<A extends unknown[], B extends unknown[]> = A extends [
+  infer AHead,
+  ...infer ATail extends unknown[],
+]
+  ? B extends [infer BHead, ...infer BTail extends unknown[]]
+    ? [AHead & BHead, ...ZipIntersectIndexed<ATail, BTail>]
+    : A
+  : B;
 
 type InsertColumnList<S extends string> = AfterKeyword<S, 'into'> extends infer AfterInto extends string
   ? Trim<DropFirstWord<AfterInto>> extends `(${infer AfterOpen}`
@@ -245,29 +264,28 @@ type InsertParamTypes<DB extends SchemaLike, Q extends string> = ParseStatement<
       : unknown[]
   : unknown[];
 
-type ContainsPlaceholderLikeChar<S extends string> = S extends
-  | `${string}$${string}`
-  | `${string}?${string}`
-  | `${string}@${string}`
-  ? true
-  : false;
-
 type CteScanEntry = [name: string, query: string, columns: string[] | null];
 
-type AnyCteBodyHasPlaceholder<Ctes extends CteScanEntry[]> = Ctes extends [
+type CteBodyParamScan<DB extends SchemaLike, Ctes extends CteScanEntry[]> = Ctes extends [
   infer Head extends CteScanEntry,
   ...infer Tail extends CteScanEntry[],
 ]
-  ? ContainsPlaceholderLikeChar<Head[1]> extends true
-    ? true
-    : AnyCteBodyHasPlaceholder<Tail>
-  : false;
-
-type CteBodiesHavePlaceholder<Q extends string> = [ParseWithClause<Normalize<Q>>] extends [never]
-  ? false
-  : ParseWithClause<Normalize<Q>> extends { ctes: infer Ctes extends CteScanEntry[] }
-    ? AnyCteBodyHasPlaceholder<Ctes>
-    : false;
+  ? [ParseStatement<Head[1]>] extends [never]
+    ? CteBodyParamScan<DB, Tail>
+    : ParseStatement<Head[1]> extends { sources: infer Sources extends Source[] }
+      ? ScanParamsRaw<Head[1], DB, Sources> extends {
+          indexed: infer HeadIndexed extends unknown[];
+          sequential: infer HeadSequential extends unknown[];
+        }
+        ? CteBodyParamScan<DB, Tail> extends {
+            indexed: infer TailIndexed extends unknown[];
+            sequential: infer TailSequential extends unknown[];
+          }
+          ? { indexed: ZipIntersectIndexed<HeadIndexed, TailIndexed>; sequential: [...HeadSequential, ...TailSequential] }
+          : never
+        : never
+      : CteBodyParamScan<DB, Tail>
+  : { indexed: []; sequential: [] };
 
 type StripDoubledAt<S extends string> = S extends `${infer Before}@@${infer After}`
   ? StripDoubledAt<`${Before}${After}`>
@@ -280,18 +298,38 @@ export type UsedPlaceholderStyles<Q extends string> = Normalize<Q> extends infer
       | (StripDoubledAt<Text> extends `${string}@${string}` ? 'at' : never)
   : never;
 
+type OuterAndCteParams<
+  DB extends SchemaLike,
+  Q extends string,
+  CteDB extends SchemaLike,
+  EffectiveQuery extends string,
+  Sources extends Source[],
+> = ScanParamsRaw<EffectiveQuery, CteDB, Sources> extends {
+  indexed: infer OuterIndexed extends unknown[];
+  sequential: infer OuterSequential extends unknown[];
+}
+  ? [ParseWithClause<Normalize<Q>>] extends [never]
+    ? [...OuterIndexed, ...OuterSequential]
+    : ParseWithClause<Normalize<Q>> extends { ctes: infer Ctes extends CteScanEntry[] }
+      ? CteBodyParamScan<CteDB, Ctes> extends {
+          indexed: infer CteIndexed extends unknown[];
+          sequential: infer CteSequential extends unknown[];
+        }
+        ? [...ZipIntersectIndexed<CteIndexed, OuterIndexed>, ...CteSequential, ...OuterSequential]
+        : unknown[]
+      : unknown[]
+  : unknown[];
+
 export type InferParams<DB extends SchemaLike, Q extends string> =
   IsKeyword<FirstWord<Normalize<Q>>, 'insert'> extends true
     ? InsertParamTypes<DB, Normalize<Q>>
-    : CteBodiesHavePlaceholder<Q> extends true
-      ? unknown[]
-      : ResolveCteContext<DB, Q, false> extends {
-            db: infer CteDB extends SchemaLike;
-            query: infer EffectiveQuery extends string;
-          }
-        ? [ParseStatement<EffectiveQuery>] extends [never]
-          ? unknown[]
-          : ParseStatement<EffectiveQuery> extends { sources: infer Sources extends Source[] }
-            ? ScanParams<EffectiveQuery, CteDB, Sources>
-            : unknown[]
-        : unknown[];
+    : ResolveCteContext<DB, Q, false> extends {
+          db: infer CteDB extends SchemaLike;
+          query: infer EffectiveQuery extends string;
+        }
+      ? [ParseStatement<EffectiveQuery>] extends [never]
+        ? unknown[]
+        : ParseStatement<EffectiveQuery> extends { sources: infer Sources extends Source[] }
+          ? OuterAndCteParams<DB, Q, CteDB, EffectiveQuery, Sources>
+          : unknown[]
+      : unknown[];

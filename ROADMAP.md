@@ -18,8 +18,20 @@ the editor tooling, not a promise of dates.
   Kysely) and a documented Drizzle recipe.
 - `npx @owlsql/core generate` — schema introspection CLI for all four
   databases.
-- `@owlsql/core/ts-plugin` — in-editor column-name autocomplete and
-  hover info (resolved column type on hover).
+- `@owlsql/core/ts-plugin` — in-editor column-name autocomplete and hover
+  info, `JOIN`/alias-aware, plus live diagnostics for unknown columns,
+  unknown tables, unknown aliases, and ambiguous unqualified columns in the
+  `SELECT` list and `FROM`/`JOIN` clause.
+- Scalar subqueries in the `SELECT` list — single-column subqueries are
+  typed; a multi-column subquery resolves to `unknown` in normal mode and a
+  `QueryTypeError` in strict mode (selecting more than one column from a
+  scalar subquery is invalid SQL). See [README limitations](README.md#limitations).
+- Typed params inside a `WITH` CTE's own body — a placeholder in a CTE's
+  own definition is typed against that CTE's own `FROM` source, in textual
+  order alongside `INSERT ... VALUES` params and params in the outer query
+  referencing a CTE by name.
+- Nested `CASE` — a `CASE` nested inside another `CASE`'s `WHEN`/`THEN`/
+  `ELSE` branch is parsed and typed like any other branch expression.
 - [COMPARISON.md](COMPARISON.md) — sourced comparison vs Prisma/Kysely/
   pgTyped/Zapatos on build step, runtime cost, bundle size, and DX.
 
@@ -28,23 +40,9 @@ the editor tooling, not a promise of dates.
 Bigger pieces that need real parser or compiler-API design work — not
 first-timer-sized, but open if you want to dig in:
 
-- **Scalar subqueries in `WHERE`** (still resolve to `unknown` — `WHERE`
+- **Scalar subqueries in `WHERE`** still resolve to `unknown` — `WHERE`
   isn't part of the typed structure at all right now, only scanned for
-  parameter placeholders). Single-column `SELECT`-list scalar subqueries are
-  typed now — see [README limitations](README.md#limitations). Multi-column
-  `SELECT`-list subqueries still resolve to `unknown` too, by design.
-- **`ts-plugin` v2**: inline diagnostics for unknown columns/tables (reusing
-  strict-mode's `QueryTypeError` logic but surfaced as a `tsserver`
-  diagnostic instead of a type), and `JOIN`/alias-aware completions and
-  hover (right now only the first `FROM <table>` is used to scope both).
-- **Typed params inside a `WITH` CTE's own subquery body** — a placeholder
-  written inside a CTE's own definition still can't be typed; the whole
-  query falls back to `unknown[]` rather than mistyping it. (`INSERT ...
-  VALUES` params against an explicit column list, and params in a query's
-  outer `SELECT` referencing a CTE by name, are both typed now — see
-  [README limitations](README.md#limitations).)
-- **Nested `CASE`** — the parser currently finds the first top-level `END`
-  only.
+  parameter placeholders.
 - **`ts-plugin` on TypeScript 7+** — TS 7's native (Go) compiler dropped the
   classic JS Compiler API entirely (no `ts.Node`/`ts.forEachChild`/
   `ts.createProgram` in the package anymore, replaced by a still-`unstable/`-

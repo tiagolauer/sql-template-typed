@@ -76,4 +76,41 @@ describe('getColumnNames / getColumnType scoping', () => {
 
     expect(getColumnType(checker, dbType, node, null, 'id')).toBeNull();
   });
+
+  it('unions columns across an explicit array of tables, for JOIN scoping', () => {
+    const { checker, dbType, node } = buildDbType(`
+      interface DB {
+        users: { id: number; name: string };
+        posts: { id: number; title: string };
+        comments: { id: number; body: string };
+      }
+      declare const dbValue: DB;
+    `);
+
+    expect(getColumnNames(checker, dbType, node, ['users', 'posts']).sort()).toEqual([
+      'id',
+      'name',
+      'title',
+    ]);
+    expect(getColumnNames(checker, dbType, node, ['users', 'posts'])).not.toContain('body');
+  });
+
+  it('resolves a column type unambiguously across a joined table array', () => {
+    const { checker, dbType, node } = buildDbType(`
+      interface DB { users: { id: number; name: string }; posts: { id: number; title: string } }
+      declare const dbValue: DB;
+    `);
+
+    const columnType = getColumnType(checker, dbType, node, ['users', 'posts'], 'name');
+    expect(columnType && checker.typeToString(columnType)).toBe('string');
+  });
+
+  it('refuses to guess a column type when joined tables in the array disagree on it', () => {
+    const { checker, dbType, node } = buildDbType(`
+      interface DB { users: { id: number }; accounts: { id: string } }
+      declare const dbValue: DB;
+    `);
+
+    expect(getColumnType(checker, dbType, node, ['users', 'accounts'], 'id')).toBeNull();
+  });
 });

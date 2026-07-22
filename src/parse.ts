@@ -496,7 +496,9 @@ type ScalarSubqueryType<
     : Row extends QueryTypeError<string>
       ? Row
       : IsUnion<keyof Row> extends true
-        ? unknown
+        ? Strict extends true
+          ? QueryTypeError<'scalar subquery must select exactly one column'>
+          : unknown
         : IsCountSubquery<Q> extends true
           ? Row[keyof Row]
           : Row[keyof Row] | null

@@ -91,10 +91,20 @@ type ParamAfterMultipleCtesStillResolves = Expect<
   >
 >;
 
-type ParamInsideCteBodyFallsBackSafelyInsteadOfClaimingZeroParams = Expect<
+type ParamInsideCteBodyIsTypedAgainstItsOwnSource = Expect<
   Equal<
     Params<DB, 'with popular as (select id from posts where views > $1) select id from popular'>,
-    unknown[]
+    [number]
+  >
+>;
+
+type ParamsInsideAndAfterCteBodyBothTypeInTextualOrder = Expect<
+  Equal<
+    Params<
+      DB,
+      'with popular as (select id from posts where views > $1) select id from popular where id = $2'
+    >,
+    [number, number]
   >
 >;
 
@@ -109,5 +119,6 @@ export type CteLock = [
   CteMultiColumnListRenamesPositionally,
   ParamAfterCteResolvesAgainstCteShape,
   ParamAfterMultipleCtesStillResolves,
-  ParamInsideCteBodyFallsBackSafelyInsteadOfClaimingZeroParams,
+  ParamInsideCteBodyIsTypedAgainstItsOwnSource,
+  ParamsInsideAndAfterCteBodyBothTypeInTextualOrder,
 ];

@@ -109,13 +109,11 @@ function findTypedDbTypeReference(
   return null;
 }
 
-function matchQueryLiteral(
+function matchQueryLiteralNode(
   typescript: TypeScript,
   checker: ts.TypeChecker,
-  sourceFile: ts.SourceFile,
-  position: number,
+  node: ts.Node,
 ): QueryLiteralMatch | null {
-  const node = findNodeAtPosition(typescript, sourceFile, position);
   if (!isSqlLiteral(typescript, node)) {
     return null;
   }
@@ -144,4 +142,35 @@ function matchQueryLiteral(
   return { literal: node, dbType };
 }
 
-export = { matchQueryLiteral };
+function matchQueryLiteral(
+  typescript: TypeScript,
+  checker: ts.TypeChecker,
+  sourceFile: ts.SourceFile,
+  position: number,
+): QueryLiteralMatch | null {
+  const node = findNodeAtPosition(typescript, sourceFile, position);
+  return matchQueryLiteralNode(typescript, checker, node);
+}
+
+function findAllQueryLiterals(
+  typescript: TypeScript,
+  checker: ts.TypeChecker,
+  sourceFile: ts.SourceFile,
+): QueryLiteralMatch[] {
+  const matches: QueryLiteralMatch[] = [];
+
+  const visit = (node: ts.Node): void => {
+    if (isSqlLiteral(typescript, node)) {
+      const match = matchQueryLiteralNode(typescript, checker, node);
+      if (match) {
+        matches.push(match);
+      }
+    }
+    typescript.forEachChild(node, visit);
+  };
+
+  typescript.forEachChild(sourceFile, visit);
+  return matches;
+}
+
+export = { matchQueryLiteral, findAllQueryLiterals };

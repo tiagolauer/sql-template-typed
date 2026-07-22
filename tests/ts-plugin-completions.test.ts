@@ -59,7 +59,7 @@ describe('ts-plugin: detect + schema against a real ts.Program', () => {
 
     const textBeforeCursor = sourceFile.text.slice(literalStart, cursor);
     const context = getSelectListContext(textBeforeCursor);
-    expect(context).toEqual({ prefix: 'na' });
+    expect(context).toEqual({ prefix: 'na', qualifier: null });
     if (!context) return;
 
     const table = findFromTable(match.literal.text);
@@ -106,7 +106,7 @@ describe('ts-plugin: detect + schema against a real ts.Program', () => {
 
     const textBeforeCursor = sourceFile.text.slice(literalStart, cursor);
     const context = getSelectListContext(textBeforeCursor) ?? getWhereClauseContext(textBeforeCursor);
-    expect(context).toEqual({ prefix: 'na' });
+    expect(context).toEqual({ prefix: 'na', qualifier: null });
     if (!context) return;
 
     const table = findFromTable(match.literal.text);
