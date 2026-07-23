@@ -91,8 +91,15 @@ describe('mapSqliteType', () => {
     expect(mapSqliteType('VARCHAR(255)')).toBe('string');
     expect(mapSqliteType('TEXT')).toBe('string');
     expect(mapSqliteType('REAL')).toBe('number');
-    expect(mapSqliteType('BLOB')).toBe('Buffer');
-    expect(mapSqliteType('')).toBe('Buffer');
+  });
+
+  it('maps BLOB and untyped columns to Uint8Array, matching node:sqlite output', () => {
+    // node:sqlite returns a plain Uint8Array for a blob column, not a
+    // Buffer instance - Buffer extends Uint8Array, not the other way
+    // around, so `instanceof Buffer` is false and Buffer-only methods
+    // (.toString('hex'), etc.) aren't there (#160).
+    expect(mapSqliteType('BLOB')).toBe('Uint8Array');
+    expect(mapSqliteType('')).toBe('Uint8Array');
   });
 
   it('special-cases BOOLEAN and DATE-like declared types', () => {
