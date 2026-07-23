@@ -90,6 +90,18 @@ export type Normalize<S extends string> = Trim<
   CollapseSpaces<WhitespaceToSpace<RemoveSemicolons<StripCommentsAndMaskLiterals<S>>>>
 >;
 
+// RemoveSemicolons strips every semicolon, not just a single trailing one, so
+// a second statement after a non-trailing semicolon would otherwise be
+// silently merged into the first. Checked against the comment-stripped,
+// literal-masked text so a semicolon inside a comment or a string literal
+// (already reduced to '') is never mistaken for a statement separator.
+export type HasNonTrailingSemicolon<S extends string> =
+  Trim<StripCommentsAndMaskLiterals<S>> extends `${string};${infer After}`
+    ? Trim<After> extends ''
+      ? false
+      : true
+    : false;
+
 export type Unquote<S extends string> = S extends `"${infer Inner}"`
   ? Inner
   : S extends `[${infer Inner}]`

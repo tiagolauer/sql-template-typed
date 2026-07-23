@@ -10,6 +10,7 @@ import type {
   ExtractParenGroup,
   ApplyParenDelta,
   SplitColumnList,
+  HasNonTrailingSemicolon,
 } from './string.js';
 import type {
   IsFunctionCall,
@@ -757,6 +758,16 @@ type ApplyWhereCheck<
   : Row;
 
 export type InferRowWith<
+  DB extends SchemaLike,
+  Q extends string,
+  Strict extends boolean,
+> = Strict extends true
+  ? HasNonTrailingSemicolon<Q> extends true
+    ? QueryTypeError<'multiple statements are not supported: found a semicolon before the end of the query'>
+    : InferRowWithChecked<DB, Q, Strict>
+  : InferRowWithChecked<DB, Q, Strict>;
+
+type InferRowWithChecked<
   DB extends SchemaLike,
   Q extends string,
   Strict extends boolean,
