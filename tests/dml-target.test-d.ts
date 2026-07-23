@@ -1,4 +1,4 @@
-import type { Query, Params } from '../src/index.js';
+import type { Query, Params, StrictQuery, QueryTypeError } from '../src/index.js';
 
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2)
@@ -11,6 +11,11 @@ interface DB {
   users: {
     id: number;
     name: string;
+  };
+  accounts: {
+    id: number;
+    user_id: number;
+    balance: number;
   };
 }
 
@@ -60,6 +65,40 @@ type UnquotedInsertStillWorks = Expect<
   >
 >;
 
+type UpdateFromRegistersTheExtraTableAsASource = Expect<
+  Equal<
+    StrictQuery<
+      DB,
+      'update users set name = name from accounts where accounts.user_id = users.id and accounts.balance > 100 returning users.id'
+    >,
+    { id: number }[]
+  >
+>;
+
+type DeleteUsingRegistersTheExtraTableAsASource = Expect<
+  Equal<
+    StrictQuery<
+      DB,
+      'delete from users using accounts where accounts.user_id = users.id and accounts.balance < 0 returning users.id'
+    >,
+    { id: number }[]
+  >
+>;
+
+type UpdateFromStillRejectsATrulyUnknownAlias = Expect<
+  Equal<
+    StrictQuery<
+      DB,
+      'update users set name = name from accounts where ghosts.id = users.id returning users.id'
+    >,
+    QueryTypeError<'unknown alias: ghosts'>[]
+  >
+>;
+
+type UpdateWithoutFromIsUnaffected = Expect<
+  Equal<Query<DB, 'update users set name = $1 where id = $2'>, Record<string, never>[]>
+>;
+
 export type Assertions = [
   SchemaQualifiedInsertResolvesReturning,
   QuotedInsertTargetResolvesReturning,
@@ -68,4 +107,8 @@ export type Assertions = [
   SchemaQualifiedDeleteResolvesReturning,
   SchemaQualifiedInsertParamsResolve,
   UnquotedInsertStillWorks,
+  UpdateFromRegistersTheExtraTableAsASource,
+  DeleteUsingRegistersTheExtraTableAsASource,
+  UpdateFromStillRejectsATrulyUnknownAlias,
+  UpdateWithoutFromIsUnaffected,
 ];

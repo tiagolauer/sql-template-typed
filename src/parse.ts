@@ -169,6 +169,33 @@ type SingleSource<Table extends string> = [
   { table: CleanTargetIdentifier<Table>; alias: CleanTargetIdentifier<Table>; nullable: false },
 ];
 
+// Postgres/SQLite's `UPDATE t SET ... FROM other WHERE ...` and Postgres's
+// `DELETE FROM t USING other WHERE ...` both introduce an extra table that
+// isn't the statement's own single target. Depth-tracked (unlike
+// AfterKeyword) so a "from"/"using" inside a subquery in the SET list isn't
+// mistaken for the clause introducer.
+type SplitAtTopLevelKeyword<
+  S extends string,
+  Keyword extends string,
+  Depth extends unknown[] = [],
+  Accumulated extends string = '',
+> = S extends `${infer Head} ${infer Tail}`
+  ? Depth extends []
+    ? IsKeyword<Head, Keyword> extends true
+      ? { before: Trim<Accumulated>; after: Tail }
+      : SplitAtTopLevelKeyword<Tail, Keyword, ApplyParenDelta<Depth, Head>, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
+    : SplitAtTopLevelKeyword<Tail, Keyword, ApplyParenDelta<Depth, Head>, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
+  : Depth extends []
+    ? IsKeyword<S, Keyword> extends true
+      ? { before: Trim<Accumulated>; after: '' }
+      : never
+    : never;
+
+type ExtraSourcesAfterKeyword<S extends string, Keyword extends string> =
+  SplitAtTopLevelKeyword<S, Keyword> extends { after: infer AfterClause extends string }
+    ? ParseFromClause<AfterClause>
+    : [];
+
 export interface ParsedStatement {
   columns: string;
   sources: Source[];
@@ -204,13 +231,19 @@ type ParseStatementNormalized<S extends string> = FirstWord<S> extends infer Key
       : IsKeyword<Keyword, 'update'> extends true
         ? {
             columns: ReturningOrOutputColumns<S, 'where'>;
-            sources: SingleSource<WordAfterKeyword<S, 'update'>>;
+            sources: [
+              ...SingleSource<WordAfterKeyword<S, 'update'>>,
+              ...ExtraSourcesAfterKeyword<S, 'from'>,
+            ];
             whereText: ExtractUpdateDeleteWhereText<S>;
           }
         : IsKeyword<Keyword, 'delete'> extends true
           ? {
               columns: ReturningOrOutputColumns<S, 'where'>;
-              sources: SingleSource<WordAfterKeyword<S, 'from'>>;
+              sources: [
+                ...SingleSource<WordAfterKeyword<S, 'from'>>,
+                ...ExtraSourcesAfterKeyword<S, 'using'>,
+              ];
               whereText: ExtractUpdateDeleteWhereText<S>;
             }
           : never
