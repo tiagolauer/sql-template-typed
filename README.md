@@ -715,17 +715,21 @@ any `FROM` is typed at all, exactly what covers the example above. `WHERE`-
 position completions require a `FROM` to already be present (there's no
 table to scope to otherwise). It also reports unknown columns, unknown
 tables, unknown aliases, and ambiguous unqualified columns (present in more
-than one joined table) as live editor diagnostics in the `SELECT` list and
-`FROM`/`JOIN` clause — the same checks strict mode (`{ strict: true }`)
-applies at compile time, surfaced as a squiggle while you type instead of
-only once the query is finished.
+than one joined table) as live editor diagnostics in the `SELECT` list,
+`FROM`/`JOIN` clause, and simple `WHERE` comparisons (`where naem = 'x'`
+squiggles `naem` the moment you type it) — the same checks strict mode
+(`{ strict: true }`) applies at compile time, surfaced as a squiggle while
+you type instead of only once the query is finished.
 
 **What it does not do** (documented scope, not bugs):
 
-- No diagnostics for the `WHERE` clause or other expressions — only the
-  `SELECT` list and `FROM`/`JOIN` table names are checked, matching what the
-  type-level parser itself validates (`WHERE` is scanned only for
-  parameter placeholders, never typed).
+- **`WHERE`-clause diagnostics cover simple comparisons only.** A column
+  token immediately before `=`/`<>`/`<`/`>`/`<=`/`>=`/`LIKE`/`ILIKE`/`IN`/
+  `BETWEEN`/`IS`, or `AND`/`OR`, or the end of the clause, is checked exactly
+  like a `SELECT`-list column. The moment a `WHERE` clause contains any `(`
+  or `)` at all — a subquery, a function call, a parenthesized group — the
+  whole clause is skipped rather than risked: no diagnostics for it, never a
+  wrong one. `HAVING`/`ORDER BY`/`GROUP BY` aren't checked at all.
 - No table-name completions after `FROM`/`JOIN` — only column names, after
   `SELECT`/`WHERE`, are suggested.
 - The first `FROM <table>` is found with a regex, not a real SQL parser: a
