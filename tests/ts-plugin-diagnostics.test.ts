@@ -32,7 +32,7 @@ function diagnosticsFor(query: string): { message: string; text: string }[] {
     expect(matches).toHaveLength(1);
     const [match] = matches;
     if (!match) return [];
-    return getQueryDiagnostics(checker, match.dbType, match.literal).map((span) => ({
+    return getQueryDiagnostics(checker, match.dbType, match.literal, sourceFile).map((span) => ({
       message: span.message,
       text: sourceFile.text.slice(span.start, span.start + span.length),
     }));
@@ -102,5 +102,17 @@ describe('ts-plugin diagnostics: getQueryDiagnostics', () => {
 
   it('does not treat a -- inside a string literal as a comment', () => {
     expect(diagnosticsFor("select name from users where name = 'a -- not a comment'")).toEqual([]);
+  });
+
+  it('anchors the diagnostic span correctly across CRLF line breaks (issue #137 repro)', () => {
+    expect(diagnosticsFor('select id,\r\n  bogus_col\r\nfrom users')).toEqual([
+      { message: 'unknown column: bogus_col', text: 'bogus_col' },
+    ]);
+  });
+
+  it('anchors a second diagnostic after multiple preceding CRLF line breaks', () => {
+    expect(
+      diagnosticsFor('select id,\r\n  name,\r\n  nope\r\nfrom users\r\nwhere id = 1'),
+    ).toEqual([{ message: 'unknown column: nope', text: 'nope' }]);
   });
 });

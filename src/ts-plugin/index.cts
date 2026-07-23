@@ -220,7 +220,7 @@ function init(modules: { typescript: typeof ts }) {
         const extra: ts.Diagnostic[] = [];
 
         for (const match of matches) {
-          for (const span of getQueryDiagnostics(checker, match.dbType, match.literal)) {
+          for (const span of getQueryDiagnostics(checker, match.dbType, match.literal, sourceFile)) {
             extra.push({
               file: sourceFile,
               start: span.start,
