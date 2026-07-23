@@ -86,6 +86,41 @@ describe.skipIf(!sqliteAvailable)('createNodeSqliteExecutor', () => {
     expect(rows).toEqual([{ active: 1, seen_at: '2026-01-02T03:04:05.000Z' }]);
   });
 
+  it('binds ? and a named parameter together without dropping the positional value', async () => {
+    const sqlite = seededDatabase();
+    const db = createTypedDb<DB>(createNodeSqliteExecutor(sqlite));
+
+    const result = await db.query('select id, name from users where name = ? and id = @id', 'ada', 1);
+
+    expect(isOk(result)).toBe(true);
+    if (isOk(result)) {
+      expect(result.value).toEqual([{ id: 1, name: 'ada' }]);
+    }
+  });
+
+  it('binds a repeated named parameter once, without misaligning the parameter after it', async () => {
+    const DatabaseSync = loadSqlite();
+    const sqlite = new DatabaseSync(':memory:');
+    sqlite.exec('create table events (id integer primary key, note text, note2 text)');
+    sqlite.prepare('insert into events (id, note, note2) values (1, ?, ?)').run('old', 'old');
+    sqlite.prepare('insert into events (id, note, note2) values (2, ?, ?)').run('untouched', 'untouched');
+    const executor = createNodeSqliteExecutor(sqlite);
+
+    // note and note2 both bind to the same @note occurrence, deduped to one
+    // slot; @id is a distinct third occurrence. If the previously-buggy
+    // type demanded a slot per *occurrence* instead of per distinct name,
+    // a caller following it would pass an extra positional value here,
+    // shifting @id onto that extra value instead of the real id - and
+    // event 1 would never actually be matched/updated.
+    await executor('update events set note = @note, note2 = @note where id = @id', ['new', 1]);
+
+    const rows = await executor('select id, note, note2 from events order by id', []);
+    expect(rows).toEqual([
+      { id: 1, note: 'new', note2: 'new' },
+      { id: 2, note: 'untouched', note2: 'untouched' },
+    ]);
+  });
+
   it('supports an INSERT round-trip through the typed client', async () => {
     const sqlite = seededDatabase();
     const db = createTypedDb<DB>(createNodeSqliteExecutor(sqlite));

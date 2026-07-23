@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { DialectExecutor } from '../index.js';
-import { collectNamedParameters } from './named-params.js';
+import { resolveMixedParameters } from './named-params.js';
 
 type SqliteParam = null | number | bigint | string | NodeJS.ArrayBufferView;
 
@@ -25,16 +25,12 @@ export function createNodeSqliteExecutor(
   return async (sql, params) => {
     const statement = db.prepare(sql);
     const values = params.map(toSqliteValue);
-    const namedParameters = collectNamedParameters(sql, SQLITE_PARAM_PREFIXES);
+    const { named, positional } = resolveMixedParameters(sql, SQLITE_PARAM_PREFIXES, values);
 
-    if (namedParameters.length > 0) {
-      const bag: Record<string, SqliteParam> = {};
-      namedParameters.forEach((name, index) => {
-        bag[name] = values[index] ?? null;
-      });
-      return statement.all(bag);
+    if (Object.keys(named).length > 0) {
+      return statement.all(named as Record<string, SqliteParam>, ...(positional as SqliteParam[]));
     }
 
-    return statement.all(...values);
+    return statement.all(...(positional as SqliteParam[]));
   };
 }

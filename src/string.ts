@@ -25,10 +25,22 @@ type RemoveSemicolons<S extends string> = S extends `${infer Before};${infer Aft
   ? RemoveSemicolons<`${Before} ${After}`>
   : S;
 
-type SkipLiteralBody<S extends string> = S extends `${string}'${infer After}`
-  ? After extends `'${infer Rest}`
-    ? SkipLiteralBody<Rest>
-    : { rest: After }
+// A quote preceded by an odd run of backslashes is backslash-escaped (MySQL's
+// default `\'` literal-quote escape) and isn't a delimiter - the run must be
+// odd, not merely non-empty, since `\\'` is an escaped backslash followed by
+// a real closing quote.
+type EndsWithOddBackslashes<S extends string> = S extends `${infer Rest}\\`
+  ? Rest extends `${infer Rest2}\\`
+    ? EndsWithOddBackslashes<Rest2>
+    : true
+  : false;
+
+type SkipLiteralBody<S extends string> = S extends `${infer Before}'${infer After}`
+  ? EndsWithOddBackslashes<Before> extends true
+    ? SkipLiteralBody<After>
+    : After extends `'${infer Rest}`
+      ? SkipLiteralBody<Rest>
+      : { rest: After }
   : never;
 
 type AfterLineComment<S extends string> = S extends `${string}
@@ -77,6 +89,18 @@ export type StripCommentsAndMaskLiterals<
 export type Normalize<S extends string> = Trim<
   CollapseSpaces<WhitespaceToSpace<RemoveSemicolons<StripCommentsAndMaskLiterals<S>>>>
 >;
+
+// RemoveSemicolons strips every semicolon, not just a single trailing one, so
+// a second statement after a non-trailing semicolon would otherwise be
+// silently merged into the first. Checked against the comment-stripped,
+// literal-masked text so a semicolon inside a comment or a string literal
+// (already reduced to '') is never mistaken for a statement separator.
+export type HasNonTrailingSemicolon<S extends string> =
+  Trim<StripCommentsAndMaskLiterals<S>> extends `${string};${infer After}`
+    ? Trim<After> extends ''
+      ? false
+      : true
+    : false;
 
 export type Unquote<S extends string> = S extends `"${infer Inner}"`
   ? Inner

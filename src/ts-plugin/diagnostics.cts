@@ -95,9 +95,15 @@ function getQueryDiagnostics(
   checker: ts.TypeChecker,
   dbType: ts.Type,
   literal: ts.StringLiteral | ts.NoSubstitutionTemplateLiteral,
+  sourceFile: ts.SourceFile,
 ): DiagnosticSpan[] {
-  const literalStart = literal.getStart() + 1;
-  const text = literal.text;
+  const literalStart = literal.getStart(sourceFile) + 1;
+  // Read the raw source slice, not the node's cooked `.text` - `.text`
+  // normalizes CRLF line endings to LF and resolves escapes, so offsets
+  // computed against it drift out of alignment with literalStart (a raw
+  // source position) by one character per preceding line break on a CRLF
+  // file. Mirrors the same fix already applied to hover in index.cts.
+  const text = sourceFile.text.slice(literalStart, literal.getEnd() - 1);
   const { stripped } = stripStringLiterals(text);
 
   const fromIndex = findTopLevelFromIndex(stripped);

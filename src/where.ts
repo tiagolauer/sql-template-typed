@@ -45,6 +45,17 @@ type IsTriggerOperator<Token extends string> = IsSymbolTriggerOperator<Token> ex
 // literal word `not` instead of the column (`NOT LIKE` / `NOT IN` / `NOT BETWEEN`).
 type IsTransparentToken<Token extends string> = Lowercase<Token> extends 'not' ? true : false;
 
+// `and`/`or` separate comparisons in a WHERE clause. They are neither trigger
+// operators nor transparent tokens, so without special handling the RHS operand
+// of the comparison immediately before them (held in `Prev`) would be silently
+// overwritten by the next token and never reach `ValidateWhereOperand` (issue
+// #148). Treat them as validation boundaries: validate the accumulated `Prev`
+// exactly the way the operator branch does, then reset scanning state so the
+// next comparison's LHS operand starts fresh. `between`'s syntactic `and`
+// (`x between 1 and 2`) is validated too, but its bounds are literals or real
+// columns, so the check is harmless there.
+type IsAndOr<Token extends string> = Lowercase<Token> extends 'and' | 'or' ? true : false;
+
 type DropOneOpenParen<S extends string> = S extends `(${infer Rest}` ? Rest : S;
 
 type HeadStartsSubquery<Head extends string, Tail extends string> = Head extends `(${string}`
@@ -86,9 +97,15 @@ type WhereScan<
           ? WhereScan<DB, Sources, Tail, CleanColumnToken<Head>>
           : Error
         : never
-      : IsTransparentToken<Head> extends true
-        ? WhereScan<DB, Sources, Tail, Prev>
-        : WhereScan<DB, Sources, Tail, CleanColumnToken<Head>>
+      : IsAndOr<Head> extends true
+        ? ValidateWhereOperand<DB, Sources, Prev> extends infer Error
+          ? [Error] extends [never]
+            ? WhereScan<DB, Sources, Tail>
+            : Error
+          : never
+        : IsTransparentToken<Head> extends true
+          ? WhereScan<DB, Sources, Tail, Prev>
+          : WhereScan<DB, Sources, Tail, CleanColumnToken<Head>>
   : // Terminal case: no trailing space left, so `S` is the final token of the
     // clause. Earlier operands are validated by the operator *after* them, but
     // the trailing operand has no following operator to trigger the check — so
