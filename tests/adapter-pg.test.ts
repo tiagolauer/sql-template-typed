@@ -46,4 +46,16 @@ describe('createPgExecutor', () => {
 
     expect(query).toHaveBeenCalledWith('select id from users where id = $1', [7]);
   });
+
+  it('normalizes an undefined param to null, matching mssql/node-sqlite', async () => {
+    const { pool, query } = fakePool({ rows: [], rowCount: 0 });
+    const executor = createPgExecutor(pool);
+
+    await executor('select id from users where id = $1 and name = $2', [7, undefined]);
+
+    expect(query).toHaveBeenCalledWith('select id from users where id = $1 and name = $2', [
+      7,
+      null,
+    ]);
+  });
 });

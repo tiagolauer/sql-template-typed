@@ -17,7 +17,11 @@ function writeMeta(header: { affectedRows?: number; insertId?: number }): QueryM
 
 export function createMysql2Executor(connection: Mysql2Queryable): DialectExecutor<'question'> {
   return async (sql, params) => {
-    const [rows] = await connection.execute(sql, params as ExecuteValues);
+    // mysql2 throws on a raw undefined parameter ("Bind parameters must not
+    // contain undefined") - normalize to null, matching
+    // mssql.ts/node-sqlite.ts.
+    const values = params.map((value) => value ?? null);
+    const [rows] = await connection.execute(sql, values as ExecuteValues);
     if (Array.isArray(rows)) {
       return rows;
     }

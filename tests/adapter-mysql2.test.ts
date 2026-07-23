@@ -37,4 +37,16 @@ describe('createMysql2Executor', () => {
 
     expect(execute).toHaveBeenCalledWith('select id from users where id = ?', [7]);
   });
+
+  it('normalizes an undefined param to null - mysql2 throws on a raw undefined', async () => {
+    const { pool, execute } = fakePool([]);
+
+    const executor = createMysql2Executor(pool);
+    await executor('select id from users where id = ? and name = ?', [7, undefined]);
+
+    expect(execute).toHaveBeenCalledWith('select id from users where id = ? and name = ?', [
+      7,
+      null,
+    ]);
+  });
 });
