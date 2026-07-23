@@ -37,6 +37,27 @@ type EscapedQuoteInsideLiteral = Expect<
   >
 >;
 
+type BackslashEscapedQuoteInsideLiteral = Expect<
+  Equal<
+    Query<DB, "select id, 'a\\'b' as note from users where email = 'x'">,
+    { id: number; note: string }[]
+  >
+>;
+
+type BackslashEscapedQuoteStillFindsWhereClauseStrict = Expect<
+  Equal<
+    StrictRow<DB, "select id, 'a\\'b' as note from users where email = 'x'">,
+    { id: number; note: string }
+  >
+>;
+
+type EscapedBackslashThenRealCloseIsNotMistakenForEscape = Expect<
+  Equal<
+    Query<DB, "select id, 'a\\\\' as note from users where email = 'x'">,
+    { id: number; note: string }[]
+  >
+>;
+
 type DollarInsideLiteralIsNotPlaceholder = Expect<
   Equal<Params<DB, "select id from users where note = 'costs $5 today'">, []>
 >;
@@ -80,6 +101,9 @@ export type Assertions = [
   UnbalancedParenInsideLiteral,
   CommaInsideLiteral,
   EscapedQuoteInsideLiteral,
+  BackslashEscapedQuoteInsideLiteral,
+  BackslashEscapedQuoteStillFindsWhereClauseStrict,
+  EscapedBackslashThenRealCloseIsNotMistakenForEscape,
   DollarInsideLiteralIsNotPlaceholder,
   QuestionMarkInsideLiteralIsNotPlaceholder,
   AtInsideCteLiteralKeepsParamTyping,

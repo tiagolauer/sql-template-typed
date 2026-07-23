@@ -25,10 +25,22 @@ type RemoveSemicolons<S extends string> = S extends `${infer Before};${infer Aft
   ? RemoveSemicolons<`${Before} ${After}`>
   : S;
 
-type SkipLiteralBody<S extends string> = S extends `${string}'${infer After}`
-  ? After extends `'${infer Rest}`
-    ? SkipLiteralBody<Rest>
-    : { rest: After }
+// A quote preceded by an odd run of backslashes is backslash-escaped (MySQL's
+// default `\'` literal-quote escape) and isn't a delimiter - the run must be
+// odd, not merely non-empty, since `\\'` is an escaped backslash followed by
+// a real closing quote.
+type EndsWithOddBackslashes<S extends string> = S extends `${infer Rest}\\`
+  ? Rest extends `${infer Rest2}\\`
+    ? EndsWithOddBackslashes<Rest2>
+    : true
+  : false;
+
+type SkipLiteralBody<S extends string> = S extends `${infer Before}'${infer After}`
+  ? EndsWithOddBackslashes<Before> extends true
+    ? SkipLiteralBody<After>
+    : After extends `'${infer Rest}`
+      ? SkipLiteralBody<Rest>
+      : { rest: After }
   : never;
 
 type AfterLineComment<S extends string> = S extends `${string}
