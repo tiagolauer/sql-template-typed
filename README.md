@@ -367,7 +367,9 @@ Recognized: `count`, `sum`, `avg`, `min`, `max`, `length`, `char_length`,
 `cume_dist` → `number`; `lower`, `upper`, `trim`, `ltrim`, `rtrim`, `concat` →
 `string`; `coalesce`, `nullif`, `lag`, `lead`, `first_value`, `last_value`,
 `nth_value` → `unknown`; `now`, `current_timestamp`, `current_date` → `Date`.
-Anything else resolves to `unknown`.
+Anything else resolves to `unknown`. This return-type table is
+dialect-agnostic, which isn't always what the driver actually hands back for
+`count`/`sum`/`avg` — see [Limitations](#limitations).
 
 ### 7. INSERT / UPDATE / DELETE with RETURNING
 
@@ -858,10 +860,19 @@ This is a focused tool for the common read path, not a full SQL grammar:
 - **Window `OVER (...)` clauses are only used as a boundary**, not parsed for
   their own typing — `PARTITION BY`/`ORDER BY` content inside `OVER (...)` is
   discarded, not validated.
-- **Aggregates assume numeric output.** `min`/`max` resolve to `number` even
-  over a text column; unrecognized functions resolve to `unknown`. `lag`,
-  `lead`, `first_value`, `last_value`, `nth_value` resolve to `unknown` (their
-  real type depends on the argument, which isn't inspected).
+- **Aggregates assume numeric output, dialect-agnostically.** `min`/`max`
+  resolve to `number` even over a text column; unrecognized functions resolve
+  to `unknown`. `count`, `sum`, and `avg` also resolve to `number`, but that's
+  not always what comes back at runtime: with `pg`'s default config (no
+  custom `types` parser), `count(*)`/`count(col)` is `bigint` and
+  `sum(int_col)`/`avg(...)` is `numeric` at the SQL level, and `pg` decodes
+  both as JS strings to avoid precision loss — the same reason plain
+  `bigint`/`numeric` *columns* map to `string` (see [Type mapping follows
+  each driver's defaults](#1-describe-your-schema)). Cast at the call site
+  (`Number(rows[0].count)`, or a BigInt-aware conversion) if you need to do
+  arithmetic on it. `lag`, `lead`, `first_value`, `last_value`, `nth_value`
+  resolve to `unknown` (their real type depends on the argument, which isn't
+  inspected).
 - **`select *` across a join merges columns by name.** When two tables share a
   column name (e.g. both have `id`), the types are intersected rather than kept
   separate. Alias the columns to keep them distinct.
