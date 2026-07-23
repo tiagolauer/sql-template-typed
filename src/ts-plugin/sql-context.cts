@@ -1,6 +1,11 @@
 const SELECT_START = /^select\b/i;
 const HAS_FROM = /\bfrom\b/i;
 const HAS_COLUMN_CLAUSE = /\b(where|having|on|order\s+by|group\s+by)\b/i;
+const WITH_START = /^\s*with\b/i;
+const RECURSIVE_KEYWORD = /^\s*recursive\b/i;
+const CTE_NAME = /^\s*([A-Za-z_][A-Za-z0-9_]*)/;
+const AS_KEYWORD_START = /^\s*as\b/i;
+const LEADING_COMMA = /^\s*,/;
 const QUALIFIED_TRAILING_TOKEN = /(?:([A-Za-z_][A-Za-z0-9_]*)\.)?([A-Za-z0-9_]*)$/;
 const FROM_TABLE = /\bfrom\s+(?:[A-Za-z_][A-Za-z0-9_]*\.)?([A-Za-z_][A-Za-z0-9_]*)/i;
 const FROM_OR_JOIN_SOURCE = /\b(from|join)\s+(?:[A-Za-z_][A-Za-z0-9_]*\.)?([A-Za-z_][A-Za-z0-9_]*)(?:\s+(as\s+)?([A-Za-z_][A-Za-z0-9_]*))?/gid;
@@ -126,6 +131,90 @@ function stripStringLiterals(text: string): StrippedText {
   return { stripped, insideLiteral };
 }
 
+interface WithClauseResult {
+  cteNames: string[];
+  remainder: string;
+  remainderStart: number;
+}
+
+function skipParenGroup(text: string, openIndex: number): number | null {
+  let depth = 0;
+  for (let i = openIndex; i < text.length; i += 1) {
+    if (text[i] === '(') {
+      depth += 1;
+    } else if (text[i] === ')') {
+      depth -= 1;
+      if (depth === 0) {
+        return i + 1;
+      }
+    }
+  }
+  return null;
+}
+
+// Skip a leading `WITH [RECURSIVE] name [(cols)] AS (query), ...` prefix so
+// the caller can test the statement that actually follows it, mirroring how
+// the type-level parser's ParseWithClause (src/cte.ts) strips CTEs before
+// parsing the rest of the statement. `text` is expected to already be
+// comment/literal-masked (see stripStringLiterals). When the cursor lands
+// inside a still-open CTE body, this recurses into that body directly, since
+// completions there should be resolved against the CTE's own inner query.
+function stripWithClause(text: string): WithClauseResult {
+  const fallback: WithClauseResult = { cteNames: [], remainder: text, remainderStart: 0 };
+  if (!WITH_START.test(text)) {
+    return fallback;
+  }
+
+  const cteNames: string[] = [];
+  let rest = text.replace(WITH_START, '').replace(RECURSIVE_KEYWORD, '');
+
+  while (true) {
+    const nameMatch = CTE_NAME.exec(rest);
+    if (!nameMatch?.[1]) {
+      return fallback;
+    }
+    const name = nameMatch[1];
+    let afterName = rest.slice(nameMatch[0].length);
+
+    if (/^\s*\(/.test(afterName)) {
+      const openIndex = afterName.indexOf('(');
+      const closeIndex = skipParenGroup(afterName, openIndex);
+      if (closeIndex === null) {
+        return fallback;
+      }
+      afterName = afterName.slice(closeIndex);
+    }
+
+    if (!AS_KEYWORD_START.test(afterName)) {
+      return fallback;
+    }
+    const afterAs = afterName.replace(AS_KEYWORD_START, '');
+
+    const openIndex = afterAs.indexOf('(');
+    if (openIndex === -1 || afterAs.slice(0, openIndex).trim() !== '') {
+      return fallback;
+    }
+
+    const closeIndex = skipParenGroup(afterAs, openIndex);
+    if (closeIndex === null) {
+      const body = afterAs.slice(openIndex + 1);
+      const inner = stripWithClause(body);
+      const remainderStart = text.length - body.length + inner.remainderStart;
+      return { cteNames: [...cteNames, name, ...inner.cteNames], remainder: inner.remainder, remainderStart };
+    }
+
+    cteNames.push(name);
+    rest = afterAs.slice(closeIndex);
+
+    if (LEADING_COMMA.test(rest)) {
+      rest = rest.replace(LEADING_COMMA, '');
+      continue;
+    }
+
+    return { cteNames, remainder: rest, remainderStart: text.length - rest.length };
+  }
+}
+
 function prefixFrom(textBeforeCursor: string): SelectListContext | null {
   const match = QUALIFIED_TRAILING_TOKEN.exec(textBeforeCursor);
   const qualifier = match?.[1] ?? null;
@@ -142,11 +231,13 @@ function getSelectListContext(textBeforeCursor: string): SelectListContext | nul
     return null;
   }
 
-  if (!SELECT_START.test(stripped.trimStart())) {
+  const { remainder } = stripWithClause(stripped);
+
+  if (!SELECT_START.test(remainder.trimStart())) {
     return null;
   }
 
-  if (HAS_FROM.test(stripped)) {
+  if (HAS_FROM.test(remainder)) {
     return null;
   }
 
@@ -159,11 +250,13 @@ function getWhereClauseContext(textBeforeCursor: string): SelectListContext | nu
     return null;
   }
 
-  if (!HAS_FROM.test(stripped)) {
+  const { remainder } = stripWithClause(stripped);
+
+  if (!HAS_FROM.test(remainder)) {
     return null;
   }
 
-  if (!HAS_COLUMN_CLAUSE.test(stripped)) {
+  if (!HAS_COLUMN_CLAUSE.test(remainder)) {
     return null;
   }
 
@@ -178,19 +271,32 @@ function findFromTable(fullLiteralText: string): string | null {
 
 function findSources(fullLiteralText: string): QuerySource[] {
   const { stripped } = stripStringLiterals(fullLiteralText);
+  // A CTE's inner query is its own private scope: its FROM/JOIN sources
+  // belong to it, not to the outer statement, so scan only what follows the
+  // WITH-clause. That also keeps a CTE's own name from being surfaced as a
+  // FROM/JOIN source when the outer statement selects from it - it isn't a
+  // real schema table, and its projected columns aren't something this
+  // heuristic scanner can compute anyway.
+  const { remainder, remainderStart, cteNames } = stripWithClause(stripped);
+  const cteNameSet = new Set(cteNames.map((name) => name.toLowerCase()));
   const sources: QuerySource[] = [];
 
   FROM_OR_JOIN_SOURCE.lastIndex = 0;
   let match: RegExpExecArray | null;
-  while ((match = FROM_OR_JOIN_SOURCE.exec(stripped)) !== null) {
+  while ((match = FROM_OR_JOIN_SOURCE.exec(remainder)) !== null) {
     const table = match[2];
     const tableSpan = (match as unknown as { indices?: Array<[number, number] | undefined> }).indices?.[2];
-    if (!table || !tableSpan) {
+    if (!table || !tableSpan || cteNameSet.has(table.toLowerCase())) {
       continue;
     }
     const rawAlias = match[4] ?? null;
     const alias = rawAlias && !RESERVED_AFTER_SOURCE.has(rawAlias.toLowerCase()) ? rawAlias : table;
-    sources.push({ table, alias, tableStart: tableSpan[0], tableEnd: tableSpan[1] });
+    sources.push({
+      table,
+      alias,
+      tableStart: remainderStart + tableSpan[0],
+      tableEnd: remainderStart + tableSpan[1],
+    });
   }
 
   return sources;
@@ -251,4 +357,5 @@ export = {
   getQualifierBefore,
   getWordAtOffset,
   stripStringLiterals,
+  stripWithClause,
 };

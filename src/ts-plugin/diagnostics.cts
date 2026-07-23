@@ -2,7 +2,7 @@ import type * as ts from 'typescript';
 import sqlContext = require('./sql-context.cjs');
 import schemaModule = require('./schema.cjs');
 
-const { findSources, findSourceByAlias, stripStringLiterals } = sqlContext;
+const { findSources, findSourceByAlias, stripStringLiterals, stripWithClause } = sqlContext;
 const { getColumnNames } = schemaModule;
 
 const SELECT_KEYWORD = /^\s*select\b/i;
@@ -105,9 +105,14 @@ function getQueryDiagnostics(
   // file. Mirrors the same fix already applied to hover in index.cts.
   const text = sourceFile.text.slice(literalStart, literal.getEnd() - 1);
   const { stripped } = stripStringLiterals(text);
+  // A CTE query's outer statement doesn't start at offset 0 - skip the
+  // WITH-clause prefix (mirroring ParseWithClause in src/cte.ts) so the
+  // SELECT gate and the select-list slice below both operate on the outer
+  // statement rather than being fooled by the CTE body's own FROM/SELECT.
+  const { remainder, remainderStart } = stripWithClause(stripped);
 
   const fromIndex = findTopLevelFromIndex(stripped);
-  if (fromIndex === null || !SELECT_KEYWORD.test(stripped)) {
+  if (fromIndex === null || !SELECT_KEYWORD.test(remainder)) {
     return [];
   }
 
@@ -124,10 +129,10 @@ function getQueryDiagnostics(
     }
   }
 
-  const beforeFrom = stripped.slice(0, fromIndex);
+  const beforeFrom = stripped.slice(remainderStart, fromIndex);
   const afterSelect = skipLeadingKeyword(beforeFrom, SELECT_KEYWORD);
   const selectList = skipLeadingKeyword(afterSelect, DISTINCT_KEYWORD);
-  const selectListOffset = beforeFrom.length - selectList.length;
+  const selectListOffset = remainderStart + (beforeFrom.length - selectList.length);
 
   for (const entry of splitTopLevelCommas(selectList)) {
     const parsed = columnTokenFromEntry(entry);
