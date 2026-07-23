@@ -1,21 +1,33 @@
 import type { Trim, FirstWord, DropFirstWord, IsKeyword, Unquote } from './string.js';
 import type { SchemaLike, Source, ResolveColumnType } from './parse.js';
 
-export type IsCaseExpression<Expr extends string> = IsKeyword<FirstWord<Trim<Expr>>, 'case'>;
+// A nested CASE is often written wrapped in parens (`(case ... end)`), which
+// glues the paren onto the adjacent keyword token ("(case", "end)") since
+// there's no space between them. Stripping the attached paren before the
+// keyword comparison - without touching what gets accumulated into the body
+// text - lets `case`/`end` depth-tracking see through the wrapping the same
+// way it already does for a bare nested `case ... end`.
+type StripLeadingParens<S extends string> = S extends `(${infer Rest}` ? StripLeadingParens<Rest> : S;
+type StripTrailingParens<S extends string> = S extends `${infer Rest})` ? StripTrailingParens<Rest> : S;
+
+type IsCaseToken<Token extends string> = IsKeyword<StripLeadingParens<Token>, 'case'>;
+type IsEndToken<Token extends string> = IsKeyword<StripTrailingParens<Token>, 'end'>;
+
+export type IsCaseExpression<Expr extends string> = IsCaseToken<FirstWord<Trim<Expr>>>;
 
 type FindEnd<
   S extends string,
   Depth extends unknown[] = [],
   Accumulated extends string = '',
 > = S extends `${infer Head} ${infer Tail}`
-  ? IsKeyword<Head, 'case'> extends true
+  ? IsCaseToken<Head> extends true
     ? FindEnd<Tail, [...Depth, unknown], Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
-    : IsKeyword<Head, 'end'> extends true
+    : IsEndToken<Head> extends true
       ? Depth extends [unknown, ...infer DepthRest extends unknown[]]
         ? FindEnd<Tail, DepthRest, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
         : { body: Trim<Accumulated>; rest: Trim<Tail> }
       : FindEnd<Tail, Depth, Accumulated extends '' ? Head : `${Accumulated} ${Head}`>
-  : IsKeyword<S, 'end'> extends true
+  : IsEndToken<S> extends true
     ? Depth extends []
       ? { body: Trim<Accumulated>; rest: '' }
       : never
@@ -43,9 +55,9 @@ type ScanCaseSegments<
   Accumulated extends CaseSegment[],
   Depth extends unknown[] = [],
 > = S extends `${infer Head} ${infer Tail}`
-  ? IsKeyword<Head, 'case'> extends true
+  ? IsCaseToken<Head> extends true
     ? ScanCaseSegments<Tail, CurrentKind, CurrentText extends '' ? Head : `${CurrentText} ${Head}`, Accumulated, [...Depth, unknown]>
-    : IsKeyword<Head, 'end'> extends true
+    : IsEndToken<Head> extends true
       ? Depth extends [unknown, ...infer DepthRest extends unknown[]]
         ? ScanCaseSegments<Tail, CurrentKind, CurrentText extends '' ? Head : `${CurrentText} ${Head}`, Accumulated, DepthRest>
         : ScanCaseSegments<Tail, CurrentKind, CurrentText extends '' ? Head : `${CurrentText} ${Head}`, Accumulated, Depth>

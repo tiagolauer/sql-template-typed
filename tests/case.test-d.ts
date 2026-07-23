@@ -76,6 +76,23 @@ type NestedCaseFollowedByOuterElse = Expect<
   >
 >;
 
+type NestedCaseWrappedInParens = Expect<
+  Equal<
+    Query<
+      DB,
+      "select case when active then (case when age < 18 then 'minor' else 'adult' end) else 'unknown' end as status from users"
+    >,
+    { status: string }[]
+  >
+>;
+
+type OuterCaseWrappedInParens = Expect<
+  Equal<
+    Query<DB, "select (case when active then 'yes' else 'no' end) as status from users">,
+    { status: string }[]
+  >
+>;
+
 export type CaseLock = [
   CaseWithLiterals,
   CaseWithoutElseIsNullable,
@@ -85,4 +102,6 @@ export type CaseLock = [
   CaseWithUnknownColumnFallsBackToUnknown,
   NestedCase,
   NestedCaseFollowedByOuterElse,
+  NestedCaseWrappedInParens,
+  OuterCaseWrappedInParens,
 ];
