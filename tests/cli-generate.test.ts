@@ -50,6 +50,41 @@ describe('detectDialect', () => {
 
     expect(message).toContain('Unrecognized connection URL');
     expect(message).not.toContain('S3cretPass');
+    expect(message).toContain('Uid=sa;Pwd=***;Initial Catalog=mydb;');
+  });
+
+  it('treats Windows drive-letter paths containing "@" as sqlite, not a mistyped URL', () => {
+    expect(detectDialect('C:/app@prod.db')).toBe('sqlite');
+    expect(detectDialect('D:\\data@backup.db')).toBe('sqlite');
+    expect(detectDialect('c:/Users/me@work/app.db')).toBe('sqlite');
+  });
+
+  it('redacts a quoted DSN password containing a semicolon without leaking it', () => {
+    let message = '';
+    try {
+      detectDialect('Uid=sa;Pwd="S3;cretPass";Initial Catalog=mydb;');
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+
+    expect(message).toContain('Unrecognized connection URL');
+    expect(message).toContain('Uid=sa;Pwd=***;Initial Catalog=mydb;');
+    expect(message).not.toContain('S3;cretPass');
+    expect(message).not.toContain('cretPass');
+  });
+
+  it('redacts a brace-wrapped DSN password containing a semicolon without leaking it', () => {
+    let message = '';
+    try {
+      detectDialect('Uid=sa;Pwd={S3;cretPass};Initial Catalog=mydb;');
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+
+    expect(message).toContain('Unrecognized connection URL');
+    expect(message).toContain('Uid=sa;Pwd=***;Initial Catalog=mydb;');
+    expect(message).not.toContain('S3;cretPass');
+    expect(message).not.toContain('cretPass');
   });
 });
 
