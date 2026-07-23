@@ -10,6 +10,19 @@ describe('redactCredentials', () => {
     expect(redactCredentials('mysql://root@host/db')).toBe('mysql://***@host/db');
   });
 
+  it('replaces credentials in a mistyped single-slash URL', () => {
+    expect(redactCredentials('postgres:/user:S3cret@host/db')).toBe('postgres:/***@host/db');
+  });
+
+  it('replaces the password in an ADO/DSN connection string', () => {
+    expect(redactCredentials('Uid=sa;Pwd=S3cret;Initial Catalog=db')).toBe(
+      'Uid=sa;Pwd=***;Initial Catalog=db',
+    );
+    expect(redactCredentials('Server=host;Password=S3cret;Database=db')).toBe(
+      'Server=host;Password=***;Database=db',
+    );
+  });
+
   it('leaves credential-free URLs untouched', () => {
     expect(redactCredentials('postgres://host/db')).toBe('postgres://host/db');
     expect(redactCredentials('./local.sqlite')).toBe('./local.sqlite');

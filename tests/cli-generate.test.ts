@@ -25,6 +25,32 @@ describe('detectDialect', () => {
     );
     expect(() => detectDialect('mongodb://user:pass@host/db')).toThrow('Unrecognized connection URL');
   });
+
+  it('rejects a mistyped single-slash URL without leaking the password or defaulting to sqlite (#134)', () => {
+    let message = '';
+    try {
+      detectDialect('postgres:/user:S3cretPass@host/db');
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+
+    expect(message).toContain('Unrecognized connection URL');
+    expect(message).toContain('postgres:/***@host/db');
+    expect(message).not.toContain('S3cretPass');
+    expect(message).not.toContain('user:');
+  });
+
+  it('rejects an ADO/DSN string missing a server keyword without leaking the password (#134)', () => {
+    let message = '';
+    try {
+      detectDialect('Uid=sa;Pwd=S3cretPass;Initial Catalog=mydb;');
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+
+    expect(message).toContain('Unrecognized connection URL');
+    expect(message).not.toContain('S3cretPass');
+  });
 });
 
 describe.skipIf(!sqliteAvailable)('runGenerate (end to end against a real sqlite file)', () => {
