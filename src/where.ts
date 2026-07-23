@@ -70,6 +70,9 @@ type ValidateWhereOperand<
   ? QueryTypeError<Message>
   : never;
 
+// The `${Head} ${Tail}` pattern below only recurses while a trailing space
+// remains, so the clause's last token never reaches a trigger operator that
+// would validate it. The base case below validates it directly.
 type WhereScan<
   DB extends SchemaLike,
   Sources extends Source[],
@@ -89,7 +92,9 @@ type WhereScan<
       : IsTransparentToken<Head> extends true
         ? WhereScan<DB, Sources, Tail, Prev>
         : WhereScan<DB, Sources, Tail, CleanColumnToken<Head>>
-  : never;
+  : IsTransparentToken<S> extends true
+    ? never
+    : ValidateWhereOperand<DB, Sources, CleanColumnToken<S>>;
 
 export type WhereClauseError<
   DB extends SchemaLike,

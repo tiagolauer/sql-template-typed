@@ -88,6 +88,21 @@ type UnknownColumnOnNotLikeStillValidated = Expect<
   >
 >;
 
+type UnknownColumnOnTrailingComparisonRhs = Expect<
+  Equal<
+    StrictQuery<DB, 'select id from users where age = naem'>,
+    QueryTypeError<'unknown column: naem'>[]
+  >
+>;
+
+type ValidTrailingComparisonRhsResolves = Expect<
+  Equal<StrictQuery<DB, 'select id from users where age = id'>, { id: number }[]>
+>;
+
+type TrailingIsNotNullStillResolves = Expect<
+  Equal<StrictQuery<DB, 'select id from users where deleted_at is not null'>, { id: number }[]>
+>;
+
 type FunctionCallOperandResolves = Expect<
   Equal<StrictQuery<DB, "select id from users where upper(name) = 'X'">, { id: number }[]>
 >;
@@ -172,6 +187,9 @@ export type WhereStrictLock = [
   NotBetweenResolvesColumn,
   NotIlikeResolvesColumn,
   UnknownColumnOnNotLikeStillValidated,
+  UnknownColumnOnTrailingComparisonRhs,
+  ValidTrailingComparisonRhsResolves,
+  TrailingIsNotNullStillResolves,
   FunctionCallOperandResolves,
   LengthFunctionCallOperandResolves,
   UnknownAliasInWhere,
