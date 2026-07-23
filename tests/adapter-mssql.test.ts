@@ -59,4 +59,23 @@ describe('createMssqlExecutor', () => {
 
     expect(result).toEqual({ rows: [], meta: { rowCount: 3 } });
   });
+
+  it('binds a repeated @name once, without misaligning the parameter after it', async () => {
+    const { pool, request } = fakePool({ recordset: [] });
+    const executor = createMssqlExecutor(pool);
+
+    // @now is used twice (deduped to one slot) and @id is a distinct third
+    // occurrence. Params<> now types this as two arguments; passing them
+    // straight through must bind @now to the first and @id to the second -
+    // not shift @id onto a duplicated @now value.
+    await executor('update users set last_login = @now, updated_at = @now where id = @id', [
+      'now-value',
+      7,
+    ]);
+
+    expect(request.input.mock.calls).toEqual([
+      ['now', 'now-value'],
+      ['id', 7],
+    ]);
+  });
 });

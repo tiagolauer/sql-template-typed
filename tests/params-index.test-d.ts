@@ -53,6 +53,21 @@ type NamedAtParamsStaySequential = Expect<
   >
 >;
 
+type RepeatedNamedAtPlaceholderOccupiesOneSlot = Expect<
+  Equal<Params<DB, 'select id from users where id = @id or parent_id = @id'>, [number]>
+>;
+
+type RepeatedNamedDollarPlaceholderOccupiesOneSlot = Expect<
+  Equal<Params<DB, 'select id from users where id = $id or parent_id = $id'>, [number]>
+>;
+
+type MixedQuestionMarksAndRepeatedNamedPlaceholderBindCorrectly = Expect<
+  Equal<
+    Params<DB, 'select id from users where name = ? and id = @id or parent_id = @id'>,
+    [string, number]
+  >
+>;
+
 type SystemVariableIsNotPlaceholder = Expect<
   Equal<Params<DB, 'select id from users where id = @@rowcount'>, []>
 >;
@@ -78,6 +93,9 @@ export type Assertions = [
   DoubleDigitIndexResolves,
   QuestionMarksStaySequential,
   NamedAtParamsStaySequential,
+  RepeatedNamedAtPlaceholderOccupiesOneSlot,
+  RepeatedNamedDollarPlaceholderOccupiesOneSlot,
+  MixedQuestionMarksAndRepeatedNamedPlaceholderBindCorrectly,
   SystemVariableIsNotPlaceholder,
   InsertOutOfOrderPlaceholdersBindByIndex,
   InsertInOrderStillWorks,

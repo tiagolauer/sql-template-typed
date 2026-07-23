@@ -99,6 +99,24 @@ type PlaceholderPosition<Token extends string> =
       : never
     : never;
 
+// A bare `?` is never named - each occurrence is a distinct positional slot.
+// Anything else that reaches here (a non-numeric `$name`/`@name`) is a real
+// name, used as the dedup key: a repeated `@id` must bind once (README), not
+// grow a new tuple slot per occurrence.
+type PlaceholderName<Token extends string> = CleanScanToken<Token> extends '?'
+  ? never
+  : CleanScanToken<Token>;
+
+type FindNameIndex<
+  Names extends string[],
+  Name extends string,
+  Position extends unknown[] = [],
+> = Names extends [infer Head extends string, ...infer Tail extends string[]]
+  ? Head extends Name
+    ? Position
+    : FindNameIndex<Tail, Name, [...Position, unknown]>
+  : never;
+
 type SetSlot<
   Tuple extends unknown[],
   Position extends unknown[],
@@ -127,11 +145,38 @@ type AddParam<
   Type,
   Indexed extends unknown[],
   Sequential extends unknown[],
+  SequentialNames extends string[],
 > = PlaceholderPosition<Token> extends infer Position
   ? [Position] extends [never]
-    ? { indexed: Indexed; sequential: [...Sequential, Type] }
+    ? [PlaceholderName<Token>] extends [never]
+      ? // A bare `?` still needs a same-length filler pushed onto
+        // SequentialNames, or a later named placeholder's FindNameIndex
+        // result (an index into SequentialNames) would no longer line up
+        // with that same placeholder's real slot in Sequential. '?' itself
+        // is a safe filler: PlaceholderName never resolves to '?', so it can
+        // never be produced as a search target and accidentally matched.
+        { indexed: Indexed; sequential: [...Sequential, Type]; sequentialNames: [...SequentialNames, '?'] }
+      : FindNameIndex<SequentialNames, PlaceholderName<Token>> extends infer Existing
+        ? [Existing] extends [never]
+          ? {
+              indexed: Indexed;
+              sequential: [...Sequential, Type];
+              sequentialNames: [...SequentialNames, PlaceholderName<Token>];
+            }
+          : Existing extends unknown[]
+            ? {
+                indexed: Indexed;
+                sequential: SetSlot<Sequential, Existing, Type>;
+                sequentialNames: SequentialNames;
+              }
+            : never
+        : never
     : Position extends unknown[]
-      ? { indexed: SetSlot<Indexed, Position, Type>; sequential: Sequential }
+      ? {
+          indexed: SetSlot<Indexed, Position, Type>;
+          sequential: Sequential;
+          sequentialNames: SequentialNames;
+        }
       : never
   : never;
 
@@ -143,22 +188,30 @@ type ScanParamsRaw<
   Prev extends string = '',
   Indexed extends unknown[] = [],
   Sequential extends unknown[] = [],
+  SequentialNames extends string[] = [],
 > = S extends `${infer Head} ${infer Tail}`
   ? IsPlaceholder<Head> extends true
-    ? AddParam<Head, ParamType<DB, Sources, PrevPrev, Prev>, Indexed, Sequential> extends {
+    ? AddParam<
+        Head,
+        ParamType<DB, Sources, PrevPrev, Prev>,
+        Indexed,
+        Sequential,
+        SequentialNames
+      > extends {
         indexed: infer NextIndexed extends unknown[];
         sequential: infer NextSequential extends unknown[];
+        sequentialNames: infer NextSequentialNames extends string[];
       }
-      ? ScanParamsRaw<Tail, DB, Sources, PrevPrev, Prev, NextIndexed, NextSequential>
+      ? ScanParamsRaw<Tail, DB, Sources, PrevPrev, Prev, NextIndexed, NextSequential, NextSequentialNames>
       : never
     : IsTransparentToken<Head> extends true
-      ? ScanParamsRaw<Tail, DB, Sources, PrevPrev, Prev, Indexed, Sequential>
-      : ScanParamsRaw<Tail, DB, Sources, Prev, CleanColumnToken<Head>, Indexed, Sequential>
+      ? ScanParamsRaw<Tail, DB, Sources, PrevPrev, Prev, Indexed, Sequential, SequentialNames>
+      : ScanParamsRaw<Tail, DB, Sources, Prev, CleanColumnToken<Head>, Indexed, Sequential, SequentialNames>
   : S extends ''
-    ? { indexed: Indexed; sequential: Sequential }
+    ? { indexed: Indexed; sequential: Sequential; sequentialNames: SequentialNames }
     : IsPlaceholder<S> extends true
-      ? AddParam<S, ParamType<DB, Sources, PrevPrev, Prev>, Indexed, Sequential>
-      : { indexed: Indexed; sequential: Sequential };
+      ? AddParam<S, ParamType<DB, Sources, PrevPrev, Prev>, Indexed, Sequential, SequentialNames>
+      : { indexed: Indexed; sequential: Sequential; sequentialNames: SequentialNames };
 
 type ScanParams<
   S extends string,
@@ -168,7 +221,8 @@ type ScanParams<
   Prev extends string = '',
   Indexed extends unknown[] = [],
   Sequential extends unknown[] = [],
-> = ScanParamsRaw<S, DB, Sources, PrevPrev, Prev, Indexed, Sequential> extends {
+  SequentialNames extends string[] = [],
+> = ScanParamsRaw<S, DB, Sources, PrevPrev, Prev, Indexed, Sequential, SequentialNames> extends {
   indexed: infer FinalIndexed extends unknown[];
   sequential: infer FinalSequential extends unknown[];
 }
@@ -211,18 +265,34 @@ type MatchInsertValues<
   Values extends string[],
   Indexed extends unknown[],
   Sequential extends unknown[],
+  SequentialNames extends string[],
 > = Values extends [infer Head extends string, ...infer ValuesTail extends string[]]
   ? Columns extends [infer ColumnHead extends string, ...infer ColumnsTail extends string[]]
     ? IsPlaceholder<Trim<Head>> extends true
-      ? AddParam<Trim<Head>, ColumnTypeAt<DB, Table, ColumnHead>, Indexed, Sequential> extends {
+      ? AddParam<
+          Trim<Head>,
+          ColumnTypeAt<DB, Table, ColumnHead>,
+          Indexed,
+          Sequential,
+          SequentialNames
+        > extends {
           indexed: infer NextIndexed extends unknown[];
           sequential: infer NextSequential extends unknown[];
+          sequentialNames: infer NextSequentialNames extends string[];
         }
-        ? MatchInsertValues<DB, Table, ColumnsTail, ValuesTail, NextIndexed, NextSequential>
+        ? MatchInsertValues<
+            DB,
+            Table,
+            ColumnsTail,
+            ValuesTail,
+            NextIndexed,
+            NextSequential,
+            NextSequentialNames
+          >
         : never
-      : MatchInsertValues<DB, Table, ColumnsTail, ValuesTail, Indexed, Sequential>
-    : { indexed: Indexed; sequential: Sequential }
-  : { indexed: Indexed; sequential: Sequential };
+      : MatchInsertValues<DB, Table, ColumnsTail, ValuesTail, Indexed, Sequential, SequentialNames>
+    : { indexed: Indexed; sequential: Sequential; sequentialNames: SequentialNames }
+  : { indexed: Indexed; sequential: Sequential; sequentialNames: SequentialNames };
 
 type ScanValuesGroups<
   S extends string,
@@ -231,18 +301,33 @@ type ScanValuesGroups<
   Columns extends string[],
   Indexed extends unknown[],
   Sequential extends unknown[],
+  SequentialNames extends string[],
 > = Trim<S> extends `(${infer AfterOpen}`
   ? ExtractParenGroup<AfterOpen> extends { inner: infer Vals extends string; rest: infer Rest extends string }
-    ? MatchInsertValues<DB, Table, Columns, SplitColumnList<Vals>, Indexed, Sequential> extends {
+    ? MatchInsertValues<
+        DB,
+        Table,
+        Columns,
+        SplitColumnList<Vals>,
+        Indexed,
+        Sequential,
+        SequentialNames
+      > extends {
         indexed: infer NextIndexed extends unknown[];
         sequential: infer NextSequential extends unknown[];
+        sequentialNames: infer NextSequentialNames extends string[];
       }
       ? Trim<Rest> extends `,${infer NextGroup}`
-        ? ScanValuesGroups<NextGroup, DB, Table, Columns, NextIndexed, NextSequential>
-        : { indexed: NextIndexed; sequential: NextSequential; rest: Trim<Rest> }
+        ? ScanValuesGroups<NextGroup, DB, Table, Columns, NextIndexed, NextSequential, NextSequentialNames>
+        : {
+            indexed: NextIndexed;
+            sequential: NextSequential;
+            sequentialNames: NextSequentialNames;
+            rest: Trim<Rest>;
+          }
       : never
-    : { indexed: Indexed; sequential: Sequential; rest: Trim<S> }
-  : { indexed: Indexed; sequential: Sequential; rest: Trim<S> };
+    : { indexed: Indexed; sequential: Sequential; sequentialNames: SequentialNames; rest: Trim<S> }
+  : { indexed: Indexed; sequential: Sequential; sequentialNames: SequentialNames; rest: Trim<S> };
 
 type InsertParamTypes<DB extends SchemaLike, Q extends string> = ParseStatement<Q> extends {
   sources: [infer Src extends Source];
@@ -252,12 +337,13 @@ type InsertParamTypes<DB extends SchemaLike, Q extends string> = ParseStatement<
     : InsertColumnList<Q> extends { columns: infer Columns extends string[]; rest: infer AfterColumns extends string }
       ? AfterKeyword<AfterColumns, 'values'> extends infer AfterValues
         ? AfterValues extends string
-          ? ScanValuesGroups<AfterValues, DB, Src['table'], Columns, [], []> extends {
+          ? ScanValuesGroups<AfterValues, DB, Src['table'], Columns, [], [], []> extends {
               indexed: infer Indexed extends unknown[];
               sequential: infer Sequential extends unknown[];
+              sequentialNames: infer SequentialNames extends string[];
               rest: infer Rest extends string;
             }
-            ? ScanParams<Rest, DB, [Src], '', '', Indexed, Sequential>
+            ? ScanParams<Rest, DB, [Src], '', '', Indexed, Sequential, SequentialNames>
             : unknown[]
           : unknown[]
         : unknown[]
