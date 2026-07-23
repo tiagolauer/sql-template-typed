@@ -745,6 +745,22 @@ type IsSelectAll<Columns extends string> = Trim<Columns> extends '*' ? true : fa
 
 type EmptyRow = Record<string, never>;
 
+// A CTE shadows a real table of the same name for the rest of the query -
+// only its own projected columns stay visible. Merging the CTE map into DB
+// with a plain intersection doesn't do that: object intersection is
+// additive, so DB['users'] & CteRow<...> still exposes every field of the
+// *original* users table, including ones the CTE's own query never
+// selected. Omitting the shadowed keys first (case-insensitively, matching
+// how every other name lookup in this codebase already resolves) before
+// intersecting closes that gap.
+type OmitShadowedTables<DB, ShadowedNames extends string> = {
+  [Key in keyof DB as Key extends string
+    ? Lowercase<Key> extends Lowercase<ShadowedNames>
+      ? never
+      : Key
+    : Key]: DB[Key];
+};
+
 export type ResolveCteContext<
   DB extends SchemaLike,
   Q extends string,
@@ -755,7 +771,10 @@ export type ResolveCteContext<
         ctes: infer Ctes extends [string, string, string[] | null][];
         rest: infer Rest extends string;
       }
-    ? { db: DB & BuildCteMap<DB, Ctes, Strict>; query: Rest }
+    ? {
+        db: OmitShadowedTables<DB, Ctes[number][0]> & BuildCteMap<DB, Ctes, Strict>;
+        query: Rest;
+      }
     : { db: DB; query: Normalize<Q> };
 
 type BuildDerivedSourceMap<
