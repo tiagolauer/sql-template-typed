@@ -1,7 +1,7 @@
 import type { Trim, FirstWord, DropFirstWord, IsKeyword, ExtractParenGroup } from './string.js';
 import type { TakeUntilClauseBoundary } from './from.js';
 import type { AfterKeyword, SchemaLike, Source, ResolveColumnType, QueryTypeError } from './parse.js';
-import type { IsPlaceholder, CleanScanToken } from './params.js';
+import type { IsPlaceholder, CleanColumnToken } from './params.js';
 
 export type ExtractSelectWhereText<AfterFromRest extends string> = Trim<AfterFromRest> extends ''
   ? ''
@@ -83,12 +83,12 @@ type WhereScan<
     : IsTriggerOperator<Head> extends true
       ? ValidateWhereOperand<DB, Sources, Prev> extends infer Error
         ? [Error] extends [never]
-          ? WhereScan<DB, Sources, Tail, CleanScanToken<Head>>
+          ? WhereScan<DB, Sources, Tail, CleanColumnToken<Head>>
           : Error
         : never
       : IsTransparentToken<Head> extends true
         ? WhereScan<DB, Sources, Tail, Prev>
-        : WhereScan<DB, Sources, Tail, CleanScanToken<Head>>
+        : WhereScan<DB, Sources, Tail, CleanColumnToken<Head>>
   : never;
 
 export type WhereClauseError<

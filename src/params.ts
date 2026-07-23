@@ -41,7 +41,7 @@ type StripTrailingListPunctuation<S extends string> = S extends `${infer Rest})`
 
 export type CleanScanToken<S extends string> = StripTrailingListPunctuation<StripLeadingParens<S>>;
 
-type CleanColumnToken<S extends string> = StripLeadingParens<S> extends infer Stripped extends string
+export type CleanColumnToken<S extends string> = StripLeadingParens<S> extends infer Stripped extends string
   ? Stripped extends `${string}(${string}`
     ? Stripped
     : StripTrailingListPunctuation<Stripped>

@@ -88,6 +88,14 @@ type UnknownColumnOnNotLikeStillValidated = Expect<
   >
 >;
 
+type FunctionCallOperandResolves = Expect<
+  Equal<StrictQuery<DB, "select id from users where upper(name) = 'X'">, { id: number }[]>
+>;
+
+type LengthFunctionCallOperandResolves = Expect<
+  Equal<StrictQuery<DB, 'select id from users where length(name) > 3'>, { id: number }[]>
+>;
+
 type UnknownAliasInWhere = Expect<
   Equal<
     StrictQuery<
@@ -164,6 +172,8 @@ export type WhereStrictLock = [
   NotBetweenResolvesColumn,
   NotIlikeResolvesColumn,
   UnknownColumnOnNotLikeStillValidated,
+  FunctionCallOperandResolves,
+  LengthFunctionCallOperandResolves,
   UnknownAliasInWhere,
   AmbiguousUnqualifiedColumnInWhere,
   QualifiedColumnInWhereIsNotAmbiguous,
