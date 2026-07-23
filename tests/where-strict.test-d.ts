@@ -65,6 +65,29 @@ type UnknownColumnOnIsDistinctFrom = Expect<
   >
 >;
 
+type NotLikeResolvesColumn = Expect<
+  Equal<StrictQuery<DB, "select id from users where name not like 'x%'">, { id: number }[]>
+>;
+
+type NotInResolvesColumn = Expect<
+  Equal<StrictQuery<DB, 'select id from users where id not in (1, 2)'>, { id: number }[]>
+>;
+
+type NotBetweenResolvesColumn = Expect<
+  Equal<StrictQuery<DB, 'select id from users where age not between 1 and 2'>, { id: number }[]>
+>;
+
+type NotIlikeResolvesColumn = Expect<
+  Equal<StrictQuery<DB, "select id from users where name not ilike 'x%'">, { id: number }[]>
+>;
+
+type UnknownColumnOnNotLikeStillValidated = Expect<
+  Equal<
+    StrictQuery<DB, "select id from users where naem not like 'x%'">,
+    QueryTypeError<'unknown column: naem'>[]
+  >
+>;
+
 type UnknownAliasInWhere = Expect<
   Equal<
     StrictQuery<
@@ -136,6 +159,11 @@ export type WhereStrictLock = [
   UnknownColumnOnIsNull,
   UnknownColumnOnIsNotNull,
   UnknownColumnOnIsDistinctFrom,
+  NotLikeResolvesColumn,
+  NotInResolvesColumn,
+  NotBetweenResolvesColumn,
+  NotIlikeResolvesColumn,
+  UnknownColumnOnNotLikeStillValidated,
   UnknownAliasInWhere,
   AmbiguousUnqualifiedColumnInWhere,
   QualifiedColumnInWhereIsNotAmbiguous,

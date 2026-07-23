@@ -39,6 +39,12 @@ type IsTriggerOperator<Token extends string> = IsSymbolTriggerOperator<Token> ex
   ? true
   : IsWordTriggerOperator<Token>;
 
+// Mirrors `IsTransparentToken` in params.ts (which lists `not`): `not` must not
+// overwrite `Prev`, otherwise it clobbers the real column just before a word
+// operator (`like`/`in`/`between`/`ilike`) fires, so the validator checks the
+// literal word `not` instead of the column (`NOT LIKE` / `NOT IN` / `NOT BETWEEN`).
+type IsTransparentToken<Token extends string> = Lowercase<Token> extends 'not' ? true : false;
+
 type DropOneOpenParen<S extends string> = S extends `(${infer Rest}` ? Rest : S;
 
 type HeadStartsSubquery<Head extends string, Tail extends string> = Head extends `(${string}`
@@ -80,7 +86,9 @@ type WhereScan<
           ? WhereScan<DB, Sources, Tail, CleanScanToken<Head>>
           : Error
         : never
-      : WhereScan<DB, Sources, Tail, CleanScanToken<Head>>
+      : IsTransparentToken<Head> extends true
+        ? WhereScan<DB, Sources, Tail, Prev>
+        : WhereScan<DB, Sources, Tail, CleanScanToken<Head>>
   : never;
 
 export type WhereClauseError<
