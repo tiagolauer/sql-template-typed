@@ -34,18 +34,19 @@ const MYSQL_SCALAR_TYPES: Record<string, string> = {
   bit: 'Buffer',
 };
 
-export function mapMysqlType(dataType: string, columnType: string): string {
+export function mapMysqlType(dataType: string): string {
   const type = dataType.toLowerCase();
-  const fullType = columnType.toLowerCase();
 
-  if (type === 'tinyint' && fullType.startsWith('tinyint(1)')) {
-    return 'boolean';
-  }
-
-  if (type === 'bit' && fullType.startsWith('bit(1)')) {
-    return 'boolean';
-  }
-
+  // tinyint(1)/bit(1) were previously special-cased to `boolean` here, but
+  // mysql2's stock parsers (no custom typeCast, which this library has no
+  // way to force onto a connection it doesn't create) never actually
+  // produce a boolean for either: TINY decodes to a plain number regardless
+  // of display width, and BIT has no dedicated case so it falls through to
+  // a raw Buffer. Trusting a `boolean` type here silently mistyped the
+  // generated column - and for BIT, a non-empty Buffer is always truthy
+  // regardless of the underlying byte, so callers checking `if (row.flag)`
+  // treated every row as true. Falling through to the plain type-map
+  // entries below matches what the driver actually returns.
   return MYSQL_SCALAR_TYPES[type] ?? 'unknown';
 }
 
@@ -82,7 +83,7 @@ export async function introspectMysql(connection: ConnectionInfo): Promise<Table
 
     const [rows] = await connectionHandle.query(
       `select c.table_name as table_name, c.column_name as column_name, c.data_type as data_type,
-              c.column_type as column_type, c.is_nullable as is_nullable
+              c.is_nullable as is_nullable
        from information_schema.columns c
        join information_schema.tables t
          on t.table_schema = c.table_schema and t.table_name = c.table_name
@@ -112,7 +113,7 @@ export function groupMysqlColumns(rows: MysqlColumnRow[], tableNames: string[] =
     const table = tables.get(tableName) ?? { name: tableName, columns: [] };
     table.columns.push({
       name: readField(row, 'column_name'),
-      tsType: mapMysqlType(readField(row, 'data_type'), readField(row, 'column_type')),
+      tsType: mapMysqlType(readField(row, 'data_type')),
       nullable: readField(row, 'is_nullable') === 'YES',
     });
     tables.set(tableName, table);

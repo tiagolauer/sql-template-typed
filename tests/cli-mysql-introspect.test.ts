@@ -27,7 +27,7 @@ describe('groupMysqlColumns', () => {
         name: 'users',
         columns: [
           { name: 'id', tsType: 'number', nullable: false },
-          { name: 'active', tsType: 'boolean', nullable: true },
+          { name: 'active', tsType: 'number', nullable: true },
         ],
       },
     ]);
@@ -67,7 +67,7 @@ describe('introspectMysql', () => {
     const columnsSql = query.mock.calls[1]?.[0] as string;
     expect(tablesSql).toContain("table_type = 'BASE TABLE'");
     expect(columnsSql).toContain("table_type = 'BASE TABLE'");
-    for (const column of ['table_name', 'column_name', 'data_type', 'column_type', 'is_nullable']) {
+    for (const column of ['table_name', 'column_name', 'data_type', 'is_nullable']) {
       expect(columnsSql).toContain(`${column} as ${column}`);
     }
     expect(tables.map((table) => table.name)).toEqual(['users', 'empty_t']);

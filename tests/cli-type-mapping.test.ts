@@ -54,29 +54,34 @@ describe('mapPostgresType', () => {
 
 describe('mapMysqlType', () => {
   it('maps ordinary integers and floats to number', () => {
-    expect(mapMysqlType('int', 'int(11)')).toBe('number');
-    expect(mapMysqlType('smallint', 'smallint(6)')).toBe('number');
+    expect(mapMysqlType('int')).toBe('number');
+    expect(mapMysqlType('smallint')).toBe('number');
   });
 
   it('maps decimal to string but bigint to number, matching mysql2 defaults', () => {
-    expect(mapMysqlType('decimal', 'decimal(10,2)')).toBe('string');
-    expect(mapMysqlType('bigint', 'bigint(20)')).toBe('number');
+    expect(mapMysqlType('decimal')).toBe('string');
+    expect(mapMysqlType('bigint')).toBe('number');
   });
 
-  it('maps tinyint(1) to boolean but other tinyint widths to number', () => {
-    expect(mapMysqlType('tinyint', 'tinyint(1)')).toBe('boolean');
-    expect(mapMysqlType('tinyint', 'tinyint(4)')).toBe('number');
+  it('maps every tinyint width to number, matching mysql2 defaults', () => {
+    // mysql2's stock parsers decode TINY as a plain number regardless of
+    // display width - tinyint(1) is not special-cased to boolean, since
+    // nothing actually casts it to one at runtime (#135).
+    expect(mapMysqlType('tinyint')).toBe('number');
   });
 
-  it('maps bit(1) to boolean but wider bit fields to Buffer', () => {
-    expect(mapMysqlType('bit', 'bit(1)')).toBe('boolean');
-    expect(mapMysqlType('bit', 'bit(8)')).toBe('Buffer');
+  it('maps bit to Buffer at every width, matching mysql2 defaults', () => {
+    // BIT has no dedicated case in mysql2's parsers, so it falls through to
+    // a raw Buffer - bit(1) is not special-cased to boolean, since a
+    // non-empty Buffer is always truthy regardless of the underlying byte
+    // (#135).
+    expect(mapMysqlType('bit')).toBe('Buffer');
   });
 
   it('maps date/time types and binary types', () => {
-    expect(mapMysqlType('datetime', 'datetime')).toBe('Date');
-    expect(mapMysqlType('time', 'time')).toBe('string');
-    expect(mapMysqlType('blob', 'blob')).toBe('Buffer');
+    expect(mapMysqlType('datetime')).toBe('Date');
+    expect(mapMysqlType('time')).toBe('string');
+    expect(mapMysqlType('blob')).toBe('Buffer');
   });
 });
 
