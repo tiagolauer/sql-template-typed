@@ -50,17 +50,68 @@ interface StrippedText {
   insideLiteral: boolean;
 }
 
+// Mask string-literal bodies AND SQL comments (`-- line`, `/* block */`) with
+// spaces so that FROM/JOIN/column detection never matches text that isn't part
+// of the executable query, while preserving every character offset (each input
+// character maps to exactly one output character). Mirrors the type-level
+// parser's `StripCommentsAndMaskLiterals` in `src/string.ts`: string literals
+// take precedence, so a `--` or `/*` inside `'...'` is not treated as a comment.
 function stripStringLiterals(text: string): StrippedText {
   let stripped = '';
   let insideLiteral = false;
+  let i = 0;
 
-  for (const char of text) {
-    if (char === "'") {
-      insideLiteral = !insideLiteral;
-      stripped += char;
+  while (i < text.length) {
+    const char = text[i];
+
+    if (insideLiteral) {
+      if (char === "'") {
+        insideLiteral = false;
+        stripped += char;
+      } else {
+        stripped += ' ';
+      }
+      i += 1;
       continue;
     }
-    stripped += !insideLiteral ? char : ' ';
+
+    if (char === "'") {
+      insideLiteral = true;
+      stripped += char;
+      i += 1;
+      continue;
+    }
+
+    if (char === '-' && text[i + 1] === '-') {
+      // Line comment: mask the `--` and everything up to (not including) the
+      // newline, which is preserved by the outer loop.
+      stripped += '  ';
+      i += 2;
+      while (i < text.length && text[i] !== '\n') {
+        stripped += ' ';
+        i += 1;
+      }
+      continue;
+    }
+
+    if (char === '/' && text[i + 1] === '*') {
+      // Block comment: mask the `/*`, the body (newlines kept), and the closing
+      // `*/` if present; an unterminated block runs to the end of the text.
+      stripped += '  ';
+      i += 2;
+      while (i < text.length && !(text[i] === '*' && text[i + 1] === '/')) {
+        stripped += text[i] === '\n' ? '\n' : ' ';
+        i += 1;
+      }
+      if (i < text.length) {
+        stripped += '  ';
+        i += 2;
+      }
+      continue;
+    }
+
+    stripped += char;
+    i += 1;
   }
 
   return { stripped, insideLiteral };

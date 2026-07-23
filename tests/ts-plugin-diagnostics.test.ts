@@ -91,4 +91,16 @@ describe('ts-plugin diagnostics: getQueryDiagnostics', () => {
   it('does not run without a FROM clause', () => {
     expect(diagnosticsFor('select nope')).toEqual([]);
   });
+
+  it('ignores a table named inside a line comment (issue #138 repro)', () => {
+    expect(diagnosticsFor('select id -- from ghosts\nfrom users')).toEqual([]);
+  });
+
+  it('ignores a table named inside a block comment', () => {
+    expect(diagnosticsFor('select id /* from ghosts */ from users')).toEqual([]);
+  });
+
+  it('does not treat a -- inside a string literal as a comment', () => {
+    expect(diagnosticsFor("select name from users where name = 'a -- not a comment'")).toEqual([]);
+  });
 });

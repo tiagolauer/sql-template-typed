@@ -179,6 +179,36 @@ describe('findSources', () => {
     if (!users) return;
     expect(text.slice(users.tableStart, users.tableEnd)).toBe('users');
   });
+
+  it('ignores a source mentioned in a line comment', () => {
+    const sources = findSources('select id -- from ghosts\nfrom users');
+    expect(sources.map((s) => ({ table: s.table, alias: s.alias }))).toEqual([
+      { table: 'users', alias: 'users' },
+    ]);
+  });
+
+  it('ignores a source mentioned in a block comment', () => {
+    const sources = findSources('select id /* from ghosts */ from users');
+    expect(sources.map((s) => ({ table: s.table, alias: s.alias }))).toEqual([
+      { table: 'users', alias: 'users' },
+    ]);
+  });
+
+  it('does not treat a -- inside a string literal as a comment', () => {
+    const sources = findSources("select id from users where note = 'a -- from ghosts'");
+    expect(sources.map((s) => ({ table: s.table, alias: s.alias }))).toEqual([
+      { table: 'users', alias: 'users' },
+    ]);
+  });
+
+  it('reports the correct table span despite a preceding comment', () => {
+    const text = 'select id /* x */ from users';
+    const sources = findSources(text);
+    const [users] = sources;
+    expect(users).toBeDefined();
+    if (!users) return;
+    expect(text.slice(users.tableStart, users.tableEnd)).toBe('users');
+  });
 });
 
 describe('findSourceByAlias', () => {
