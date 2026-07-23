@@ -5,7 +5,10 @@ type PostgresUnsafeParam = NonNullable<Parameters<postgres.Sql['unsafe']>[1]>[nu
 
 export function createPostgresJsExecutor(client: postgres.Sql): DialectExecutor<'dollar'> {
   return async (sql, params) => {
-    const result = await client.unsafe(sql, params as unknown as PostgresUnsafeParam[]);
+    // postgres.js throws on a raw undefined parameter ("Undefined values are
+    // not allowed") - normalize to null, matching mssql.ts/node-sqlite.ts.
+    const values = params.map((value) => value ?? null);
+    const result = await client.unsafe(sql, values as unknown as PostgresUnsafeParam[]);
     return {
       rows: [...result],
       meta: typeof result.count === 'number' ? { rowCount: result.count } : {},
