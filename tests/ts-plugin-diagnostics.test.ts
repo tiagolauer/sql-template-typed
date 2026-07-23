@@ -115,4 +115,30 @@ describe('ts-plugin diagnostics: getQueryDiagnostics', () => {
       diagnosticsFor('select id,\r\n  name,\r\n  nope\r\nfrom users\r\nwhere id = 1'),
     ).toEqual([{ message: 'unknown column: nope', text: 'nope' }]);
   });
+
+  it('does not flag a CTE name as an unknown table (issue #165 repro)', () => {
+    expect(
+      diagnosticsFor('with recent_users as (select id from users) select id, name from recent_users'),
+    ).toEqual([]);
+  });
+
+  it('reports an unknown table in the outer FROM clause of a CTE query', () => {
+    expect(
+      diagnosticsFor('with recent_users as (select id from users) select id from ghosts'),
+    ).toEqual([{ message: 'unknown table: ghosts', text: 'ghosts' }]);
+  });
+
+  it('reports an unknown column in the outer SELECT list of a CTE query', () => {
+    expect(
+      diagnosticsFor('with recent_users as (select id from users) select id, nope from users'),
+    ).toEqual([{ message: 'unknown column: nope', text: 'nope' }]);
+  });
+
+  it('does not flag any of several comma-separated CTE names as unknown tables', () => {
+    expect(
+      diagnosticsFor(
+        'with a as (select id from users), b as (select id from posts) select id from a join b on a.id = b.id',
+      ),
+    ).toEqual([]);
+  });
 });

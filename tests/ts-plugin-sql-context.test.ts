@@ -33,6 +33,33 @@ describe('getSelectListContext', () => {
     expect(getSelectListContext('SELECT id, na')).toEqual({ prefix: 'na', qualifier: null });
   });
 
+  it('offers completions in the outer SELECT list of a CTE query (issue #165 repro)', () => {
+    expect(
+      getSelectListContext('with recent_users as (select id from users) select id, na'),
+    ).toEqual({ prefix: 'na', qualifier: null });
+  });
+
+  it('offers completions inside a still-open CTE body', () => {
+    expect(getSelectListContext('with recent_users as (select id, na')).toEqual({
+      prefix: 'na',
+      qualifier: null,
+    });
+  });
+
+  it('offers completions past a WITH RECURSIVE clause', () => {
+    expect(
+      getSelectListContext('with recursive nums as (select id from users) select id, na'),
+    ).toEqual({ prefix: 'na', qualifier: null });
+  });
+
+  it('offers completions past multiple comma-separated CTEs', () => {
+    expect(
+      getSelectListContext(
+        'with a as (select id from users), b as (select id from posts) select id, na',
+      ),
+    ).toEqual({ prefix: 'na', qualifier: null });
+  });
+
   it('captures an alias qualifier in front of the partial word', () => {
     expect(getSelectListContext('select u.na')).toEqual({ prefix: 'na', qualifier: 'u' });
   });
@@ -70,6 +97,14 @@ describe('getWhereClauseContext', () => {
       prefix: 'na',
       qualifier: null,
     });
+  });
+
+  it('offers completions in the outer WHERE clause of a CTE query', () => {
+    expect(
+      getWhereClauseContext(
+        'with recent_users as (select id from users) select id from recent_users where na',
+      ),
+    ).toEqual({ prefix: 'na', qualifier: null });
   });
 });
 
@@ -208,6 +243,29 @@ describe('findSources', () => {
     expect(users).toBeDefined();
     if (!users) return;
     expect(text.slice(users.tableStart, users.tableEnd)).toBe('users');
+  });
+
+  it('does not surface a CTE name as if it were a real schema table (issue #165 repro)', () => {
+    const sources = findSources(
+      'with recent_users as (select id from users) select id from recent_users where active',
+    );
+    expect(sources).toEqual([]);
+  });
+
+  it('scopes sources to the outer statement, not a CTE body real table it wraps', () => {
+    const sources = findSources(
+      'with recent_users as (select id from users) select id, name from users',
+    );
+    expect(sources.map((s) => ({ table: s.table, alias: s.alias }))).toEqual([
+      { table: 'users', alias: 'users' },
+    ]);
+  });
+
+  it('excludes every comma-separated CTE name, keeping only real sources', () => {
+    const sources = findSources(
+      'with a as (select id from users), b as (select id from posts) select id from a join b on a.id = b.id',
+    );
+    expect(sources).toEqual([]);
   });
 });
 
