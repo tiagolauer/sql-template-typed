@@ -108,6 +108,34 @@ type ParamsInsideAndAfterCteBodyBothTypeInTextualOrder = Expect<
   >
 >;
 
+type CteReusingARealTableNameShadowsIt = Expect<
+  Equal<
+    StrictQuery<DB, 'with users as (select id from posts) select name from users'>,
+    QueryTypeError<'unknown column: name'>[]
+  >
+>;
+
+type CteReusingARealTableNameStillExposesItsOwnColumns = Expect<
+  Equal<
+    StrictQuery<DB, 'with users as (select id from posts) select id from users'>,
+    { id: number }[]
+  >
+>;
+
+type CteShadowingIsCaseInsensitive = Expect<
+  Equal<
+    StrictQuery<DB, 'with Users as (select id from posts) select name from Users'>,
+    QueryTypeError<'unknown column: name'>[]
+  >
+>;
+
+type UnrelatedCteNameLeavesRealTablesAlone = Expect<
+  Equal<
+    StrictQuery<DB, 'with totals as (select id from posts) select name from users'>,
+    { name: string }[]
+  >
+>;
+
 export type CteLock = [
   SimpleCte,
   CteWithJoinAgainstRealTable,
@@ -121,4 +149,8 @@ export type CteLock = [
   ParamAfterMultipleCtesStillResolves,
   ParamInsideCteBodyIsTypedAgainstItsOwnSource,
   ParamsInsideAndAfterCteBodyBothTypeInTextualOrder,
+  CteReusingARealTableNameShadowsIt,
+  CteReusingARealTableNameStillExposesItsOwnColumns,
+  CteShadowingIsCaseInsensitive,
+  UnrelatedCteNameLeavesRealTablesAlone,
 ];
