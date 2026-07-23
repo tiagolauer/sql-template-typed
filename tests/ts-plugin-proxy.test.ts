@@ -22,10 +22,13 @@ const NATIVE_QUICK_INFO = {
   textSpan: { start: 0, length: 0 },
 };
 
+const NATIVE_DIAGNOSTICS: ts.Diagnostic[] = [];
+
 function createProxy(languageServiceOverrides: Record<string, unknown>): ts.LanguageService {
   const languageService = {
     getCompletionsAtPosition: vi.fn().mockReturnValue(NATIVE_COMPLETIONS),
     getQuickInfoAtPosition: vi.fn().mockReturnValue(NATIVE_QUICK_INFO),
+    getSemanticDiagnostics: vi.fn().mockReturnValue(NATIVE_DIAGNOSTICS),
     getProgram: vi.fn().mockReturnValue(undefined),
     ...languageServiceOverrides,
   };
@@ -71,5 +74,39 @@ describe('ts-plugin proxy error handling', () => {
 
     expect(proxy.getCompletionsAtPosition('file.ts', 10, undefined)).toBe(NATIVE_COMPLETIONS);
     expect(proxy.getQuickInfoAtPosition('file.ts', 10)).toBe(NATIVE_QUICK_INFO);
+  });
+
+  it('falls back to native diagnostics when the plugin path throws', () => {
+    const getProgram = vi.fn(() => {
+      throw new Error('checker exploded');
+    });
+    const getSemanticDiagnostics = vi.fn().mockReturnValue(NATIVE_DIAGNOSTICS);
+    const proxy = createProxy({ getProgram, getSemanticDiagnostics });
+
+    const result = proxy.getSemanticDiagnostics('file.ts');
+
+    expect(result).toBe(NATIVE_DIAGNOSTICS);
+    expect(getProgram).toHaveBeenCalled();
+  });
+
+  it('computes native diagnostics lazily, only after the plugin path has run', () => {
+    const calls: string[] = [];
+    const getProgram = vi.fn(() => {
+      calls.push('getProgram');
+      return undefined;
+    });
+    const getSemanticDiagnostics = vi.fn(() => {
+      calls.push('getSemanticDiagnostics');
+      return NATIVE_DIAGNOSTICS;
+    });
+    const proxy = createProxy({ getProgram, getSemanticDiagnostics });
+
+    const result = proxy.getSemanticDiagnostics('file.ts');
+
+    expect(result).toBe(NATIVE_DIAGNOSTICS);
+    // The native diagnostics must be resolved inside the try block (after the
+    // plugin inspects the program), never eagerly before it — an eager call
+    // outside the try/catch lets an underlying throw escape the proxy.
+    expect(calls).toEqual(['getProgram', 'getSemanticDiagnostics']);
   });
 });

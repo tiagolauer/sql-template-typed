@@ -206,13 +206,13 @@ function init(modules: { typescript: typeof ts }) {
     proxy.getQuickInfoAtPosition = getQuickInfoAtPosition;
 
     const getSemanticDiagnostics: ts.LanguageService['getSemanticDiagnostics'] = (fileName) => {
-      const native = info.languageService.getSemanticDiagnostics(fileName);
+      const native = () => info.languageService.getSemanticDiagnostics(fileName);
 
       try {
         const program = info.languageService.getProgram();
         const sourceFile = program?.getSourceFile(fileName);
         if (!program || !sourceFile) {
-          return native;
+          return native();
         }
 
         const checker = program.getTypeChecker();
@@ -233,9 +233,10 @@ function init(modules: { typescript: typeof ts }) {
           }
         }
 
-        return extra.length === 0 ? native : [...native, ...extra];
+        const nativeDiagnostics = native();
+        return extra.length === 0 ? nativeDiagnostics : [...nativeDiagnostics, ...extra];
       } catch {
-        return native;
+        return native();
       }
     };
 
