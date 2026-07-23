@@ -587,9 +587,22 @@ const kysely = new Kysely<KyselySchema>({ dialect: new PostgresDialect({ /* ... 
 const db = createTypedDb<DB>(createKyselyExecutor(kysely));
 ```
 
-The adapter runs your query through `CompiledQuery.raw`, so it works
-regardless of which Kysely dialect (`PostgresDialect`, `MysqlDialect`,
-`SqliteDialect`, ...) you configured.
+The adapter runs your query through `CompiledQuery.raw`, which forwards the
+SQL text and parameters straight to the underlying driver with **no
+placeholder translation** — the SQL you write still has to use whichever
+placeholder syntax your configured dialect's own driver expects (`$1` for
+`PostgresDialect`, `?` for `MysqlDialect`/`SqliteDialect`). What the adapter
+does *not* care about is which Kysely dialect object you passed in; it just
+relays whatever string you give it.
+
+If you want the same compile-time protection against using the wrong
+placeholder style that the other adapters get, pass `placeholders` to
+`createTypedDb` the same way you would for any of them — it's driven by
+that option, not by which adapter produced the executor:
+
+```ts
+const db = createTypedDb<DB, { placeholders: 'question' }>(createKyselyExecutor(kysely));
+```
 
 **Drizzle (raw SQL)**
 
