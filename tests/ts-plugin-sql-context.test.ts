@@ -87,6 +87,10 @@ describe('context misfire guards', () => {
     expect(getWhereClauseContext('select id from users where id = 12')).toBeNull();
   });
 
+  it('stays inside the literal after a backslash-escaped quote', () => {
+    expect(getWhereClauseContext("select id from users where bio = 'it\\'s ")).toBeNull();
+  });
+
   it('offers columns after ORDER BY and GROUP BY without a WHERE clause', () => {
     expect(getWhereClauseContext('select id from users order by na')).toEqual({
       prefix: 'na',
@@ -196,6 +200,13 @@ describe('findSources', () => {
 
   it('does not treat a -- inside a string literal as a comment', () => {
     const sources = findSources("select id from users where note = 'a -- from ghosts'");
+    expect(sources.map((s) => ({ table: s.table, alias: s.alias }))).toEqual([
+      { table: 'users', alias: 'users' },
+    ]);
+  });
+
+  it('does not treat a backslash-escaped quote as closing the string literal', () => {
+    const sources = findSources("select * from users where bio = 'it\\'s from secrets_table'");
     expect(sources.map((s) => ({ table: s.table, alias: s.alias }))).toEqual([
       { table: 'users', alias: 'users' },
     ]);

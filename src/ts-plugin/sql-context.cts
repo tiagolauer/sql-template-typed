@@ -59,18 +59,25 @@ interface StrippedText {
 function stripStringLiterals(text: string): StrippedText {
   let stripped = '';
   let insideLiteral = false;
+  // Count of consecutive backslash characters immediately preceding the
+  // current position, so a quote closing a literal can be told apart from
+  // one escaped by MySQL's default \' - mirrors EndsWithOddBackslashes in
+  // src/string.ts, which the type-level parser already relies on for the
+  // same reason. Only meaningful while insideLiteral is true.
+  let precedingBackslashes = 0;
   let i = 0;
 
   while (i < text.length) {
     const char = text[i];
 
     if (insideLiteral) {
-      if (char === "'") {
+      if (char === "'" && precedingBackslashes % 2 === 0) {
         insideLiteral = false;
         stripped += char;
       } else {
         stripped += ' ';
       }
+      precedingBackslashes = char === '\\' ? precedingBackslashes + 1 : 0;
       i += 1;
       continue;
     }
@@ -78,6 +85,7 @@ function stripStringLiterals(text: string): StrippedText {
     if (char === "'") {
       insideLiteral = true;
       stripped += char;
+      precedingBackslashes = 0;
       i += 1;
       continue;
     }
@@ -111,6 +119,7 @@ function stripStringLiterals(text: string): StrippedText {
     }
 
     stripped += char;
+    precedingBackslashes = char === '\\' ? precedingBackslashes + 1 : 0;
     i += 1;
   }
 
