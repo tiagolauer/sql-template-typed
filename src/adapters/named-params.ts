@@ -1,4 +1,5 @@
 const NAMED_PARAM_BODY = /^[A-Za-z0-9_]+/;
+const DOLLAR_QUOTE_TAG = /^\$([A-Za-z0-9_]*)\$/;
 
 export function collectNamedParameters(sql: string, prefixes: ReadonlySet<string>): string[] {
   const names: string[] = [];
@@ -13,6 +14,16 @@ export function collectNamedParameters(sql: string, prefixes: ReadonlySet<string
     }
     if (insideLiteral) {
       continue;
+    }
+
+    if (char === '$') {
+      const open = DOLLAR_QUOTE_TAG.exec(sql.slice(index));
+      if (open) {
+        const closer = `$${open[1]}$`;
+        const closeIndex = sql.indexOf(closer, index + open[0].length);
+        index = closeIndex === -1 ? sql.length - 1 : closeIndex + closer.length - 1;
+        continue;
+      }
     }
 
     if (prefixes.has(char)) {
