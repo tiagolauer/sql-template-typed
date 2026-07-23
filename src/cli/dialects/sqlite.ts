@@ -21,7 +21,10 @@ export function mapSqliteType(declaredType: string): string {
   }
 
   if (type.includes('BLOB') || type === '') {
-    return 'Buffer';
+    // node:sqlite has no typeCast hook (same constraint as mysql2, #135) -
+    // its documented output type for a blob column is a plain Uint8Array,
+    // never a Buffer instance (@types/node/sqlite.d.ts's SQLOutputValue).
+    return 'Uint8Array';
   }
 
   if (type.includes('REAL') || type.includes('FLOA') || type.includes('DOUB')) {
