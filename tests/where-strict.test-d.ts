@@ -179,6 +179,50 @@ type ValidTrailingLiteralOperandResolves = Expect<
   Equal<StrictQuery<DB, 'select id from users where age = 5'>, { id: number }[]>
 >;
 
+// Regression for #148: the RHS operand of a comparison immediately before
+// `and`/`or` (mid-clause, not the trailing token) must be validated too.
+// Before the fix this typo passed strict mode because `and` overwrote `Prev`
+// without ever validating it.
+type UnknownColumnOnRhsBeforeAnd = Expect<
+  Equal<
+    StrictQuery<DB, 'select id from users where age = naem and id = 1'>,
+    QueryTypeError<'unknown column: naem'>[]
+  >
+>;
+
+// Lock: the same clause with a VALID RHS column before `and` still resolves —
+// the boundary validation must not reject good queries.
+type ValidRhsBeforeAndResolves = Expect<
+  Equal<StrictQuery<DB, 'select id from users where age = id and id = 1'>, { id: number }[]>
+>;
+
+// `or` variant of the mid-clause RHS check.
+type UnknownColumnOnRhsBeforeOr = Expect<
+  Equal<
+    StrictQuery<DB, 'select id from users where age = naem or id = 1'>,
+    QueryTypeError<'unknown column: naem'>[]
+  >
+>;
+
+// The LHS operand of the comparison *after* `and`/`or` must still be validated
+// by the existing flow (the operator following it triggers the check).
+type UnknownColumnOnLhsAfterAnd = Expect<
+  Equal<
+    StrictQuery<DB, 'select id from users where age = 1 and naem = 2'>,
+    QueryTypeError<'unknown column: naem'>[]
+  >
+>;
+
+// NOT-form interaction: `not like 'x'` validates `age`, the `and` boundary
+// validates the string literal `'x'` (harmless) and resets, and the LHS `naem`
+// of the next comparison is then validated.
+type NotFormComposesWithAndBoundary = Expect<
+  Equal<
+    StrictQuery<DB, "select id from users where age not like 'x' and naem = 1">,
+    QueryTypeError<'unknown column: naem'>[]
+  >
+>;
+
 export type WhereStrictLock = [
   ValidWhereStillResolves,
   UnknownColumnOnComparisonLhs,
@@ -206,4 +250,9 @@ export type WhereStrictLock = [
   UnknownColumnOnComparisonRhs,
   ValidTrailingColumnOperandResolves,
   ValidTrailingLiteralOperandResolves,
+  UnknownColumnOnRhsBeforeAnd,
+  ValidRhsBeforeAndResolves,
+  UnknownColumnOnRhsBeforeOr,
+  UnknownColumnOnLhsAfterAnd,
+  NotFormComposesWithAndBoundary,
 ];
