@@ -55,4 +55,10 @@ describe('parseFlags', () => {
     expect(flags.get('table')).toBe('users,posts');
     expect(flags.get('exclude')).toBe('migrations');
   });
+
+  it('treats --check as a boolean flag alongside --url', () => {
+    const flags = parseFlags(['--url', 'postgres://localhost/db', '--check']);
+    expect(flags.has('check')).toBe(true);
+    expect(flags.get('url')).toBe('postgres://localhost/db');
+  });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ConnectionPool, Request, Transaction } from 'mssql';
-import { createMssqlExecutor } from '../src/adapters/mssql.js';
+import { createMssqlExecutor, createMssqlTransaction } from '../src/adapters/mssql.js';
 
 interface FakeRequest {
   input: ReturnType<typeof vi.fn>;
@@ -24,6 +24,28 @@ function fakeTransaction(result: unknown): { transaction: Transaction; request: 
   const request = fakeRequest(result);
   const transaction = { request: () => request } as unknown as Transaction;
   return { transaction, request };
+}
+
+interface DB {
+  users: { id: number; name: string };
+}
+
+function fakeTransactionalPool(): {
+  pool: ConnectionPool;
+  transactionFactory: ReturnType<typeof vi.fn>;
+  begin: ReturnType<typeof vi.fn>;
+  commit: ReturnType<typeof vi.fn>;
+  rollback: ReturnType<typeof vi.fn>;
+  request: FakeRequest;
+} {
+  const request = fakeRequest({ recordset: [] });
+  const begin = vi.fn().mockResolvedValue(undefined);
+  const commit = vi.fn().mockResolvedValue(undefined);
+  const rollback = vi.fn().mockResolvedValue(undefined);
+  const transaction = { begin, commit, rollback, request: () => request };
+  const transactionFactory = vi.fn().mockReturnValue(transaction);
+  const pool = { transaction: transactionFactory } as unknown as ConnectionPool;
+  return { pool, transactionFactory, begin, commit, rollback, request };
 }
 
 describe('createMssqlExecutor', () => {
@@ -107,5 +129,35 @@ describe('createMssqlExecutor', () => {
       ['now', 'now-value'],
       ['id', 7],
     ]);
+  });
+});
+
+describe('createMssqlTransaction', () => {
+  it('begins, runs the callback against the pinned transaction, and commits', async () => {
+    const { pool, transactionFactory, begin, commit, request } = fakeTransactionalPool();
+
+    const result = await createMssqlTransaction<DB>(pool)(async (tx) => {
+      await tx.query('select id from users');
+      return 'done';
+    });
+
+    expect(result).toBe('done');
+    expect(transactionFactory).toHaveBeenCalledOnce();
+    expect(begin).toHaveBeenCalledOnce();
+    expect(request.query).toHaveBeenCalledWith('select id from users');
+    expect(commit).toHaveBeenCalledOnce();
+  });
+
+  it('rolls back when the callback throws', async () => {
+    const { pool, rollback, commit } = fakeTransactionalPool();
+
+    await expect(
+      createMssqlTransaction<DB>(pool)(async () => {
+        throw new Error('boom');
+      }),
+    ).rejects.toThrow('boom');
+
+    expect(rollback).toHaveBeenCalledOnce();
+    expect(commit).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import type { ConnectionInfo, Dialect, TableSchema } from './types.js';
 import { renderSchema } from './codegen.js';
 import { introspectPostgres } from './dialects/postgres.js';
@@ -13,7 +13,13 @@ export interface GenerateOptions {
   schema?: string | undefined;
   tables?: string[] | undefined;
   exclude?: string[] | undefined;
+  check?: boolean | undefined;
 }
+
+export type GenerateResult =
+  | { kind: 'written' }
+  | { kind: 'upToDate' }
+  | { kind: 'drift'; summary: string };
 
 const SCHEME_PATTERN = /^[a-z][a-z0-9+.-]*:\/\//i;
 
@@ -112,7 +118,44 @@ function filterTables(tables: TableSchema[], options: GenerateOptions): TableSch
   });
 }
 
-export async function runGenerate(options: GenerateOptions): Promise<void> {
+async function readExistingFile(path: string): Promise<string | null> {
+  try {
+    return await readFile(path, 'utf8');
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+}
+
+// A full diff would need a diff library this CLI doesn't otherwise depend
+// on; pointing at the first differing line is enough to act on without one.
+function summarizeDrift(existing: string | null, generated: string): string {
+  if (existing === null) {
+    return 'the file does not exist yet.';
+  }
+
+  const existingLines = existing.split('\n');
+  const generatedLines = generated.split('\n');
+  const lineCount = Math.max(existingLines.length, generatedLines.length);
+
+  for (let index = 0; index < lineCount; index += 1) {
+    const currentLine = existingLines[index];
+    const generatedLine = generatedLines[index];
+    if (currentLine !== generatedLine) {
+      return (
+        `first differs at line ${index + 1}:\n` +
+        `  current:   ${currentLine ?? '(end of file)'}\n` +
+        `  generated: ${generatedLine ?? '(end of file)'}`
+      );
+    }
+  }
+
+  return 'differs only in trailing whitespace or line endings.';
+}
+
+export async function runGenerate(options: GenerateOptions): Promise<GenerateResult> {
   const dialect = options.dialect ?? detectDialect(options.url);
   const connection: ConnectionInfo = { url: options.url, schema: options.schema };
 
@@ -134,6 +177,13 @@ export async function runGenerate(options: GenerateOptions): Promise<void> {
 
   const source = renderSchema(tables);
 
+  if (options.check) {
+    const existing = await readExistingFile(options.out);
+    return existing === source
+      ? { kind: 'upToDate' }
+      : { kind: 'drift', summary: summarizeDrift(existing, source) };
+  }
+
   try {
     await writeFile(options.out, source, 'utf8');
   } catch (error) {
@@ -142,4 +192,6 @@ export async function runGenerate(options: GenerateOptions): Promise<void> {
     }
     throw error;
   }
+
+  return { kind: 'written' };
 }

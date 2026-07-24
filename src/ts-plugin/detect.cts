@@ -93,7 +93,18 @@ function findTypedDbTypeReference(
   checker: ts.TypeChecker,
   type: ts.Type,
 ): ts.TypeReference | null {
-  if (isTypeReference(typescript, type) && hasTypedDbBrand(checker, type)) {
+  // A type reference only carries the DB type argument when it's an actual
+  // instantiation of the generic TypedDb<DB> - `interface AppDb extends
+  // TypedDb<DB> {}` inherits the brand property onto AppDb's own type too
+  // (getPropertyOfType walks inherited members), but AppDb itself isn't
+  // generic, so checker.getTypeArguments(AppDb) is empty. Requiring a type
+  // argument here forces that case past this check and into the base-type
+  // walk below, where the real TypedDb<DB> reference is found instead.
+  if (
+    isTypeReference(typescript, type) &&
+    hasTypedDbBrand(checker, type) &&
+    checker.getTypeArguments(type).length > 0
+  ) {
     return type;
   }
 
@@ -103,6 +114,24 @@ function findTypedDbTypeReference(
       if (found) {
         return found;
       }
+    }
+  }
+
+  if (type.isClassOrInterface()) {
+    for (const baseType of type.getBaseTypes() ?? []) {
+      const found = findTypedDbTypeReference(typescript, checker, baseType);
+      if (found) {
+        return found;
+      }
+    }
+  }
+
+  // `function run<T extends TypedDb<DB>>(db: T)` - the receiver is a bare
+  // type parameter, so the brand only shows up on its constraint.
+  if (type.isTypeParameter()) {
+    const constraint = type.getConstraint();
+    if (constraint) {
+      return findTypedDbTypeReference(typescript, checker, constraint);
     }
   }
 

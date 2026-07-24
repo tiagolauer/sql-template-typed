@@ -141,4 +141,60 @@ describe('ts-plugin diagnostics: getQueryDiagnostics', () => {
       ),
     ).toEqual([]);
   });
+
+  it('reports an unknown column referenced in the WHERE clause (issue #174 repro)', () => {
+    expect(diagnosticsFor("select id from users where naem = 'x'")).toEqual([
+      { message: 'unknown column: naem', text: 'naem' },
+    ]);
+  });
+
+  it('reports an unknown alias qualifier in the WHERE clause', () => {
+    expect(diagnosticsFor('select id from users u where z.id = 1')).toEqual([
+      { message: 'unknown alias: z', text: 'z' },
+    ]);
+  });
+
+  it('reports an unknown column on a specific alias in the WHERE clause', () => {
+    expect(
+      diagnosticsFor('select u.id from users u join posts p on p.user_id = u.id where u.nope = 1'),
+    ).toEqual([{ message: 'unknown column: nope', text: 'nope' }]);
+  });
+
+  it('reports an ambiguous unqualified column in the WHERE clause', () => {
+    expect(
+      diagnosticsFor('select u.id from users u join posts p on p.user_id = u.id where id = 1'),
+    ).toEqual([{ message: 'ambiguous column: id', text: 'id' }]);
+  });
+
+  it('reports no diagnostics for a valid WHERE clause with AND/OR and a trailing operand', () => {
+    expect(
+      diagnosticsFor("select id from users where name = 'ada' and id = 1 or id = 2"),
+    ).toEqual([]);
+  });
+
+  it('does not flag literal or placeholder operands in the WHERE clause', () => {
+    expect(diagnosticsFor('select id from users where id = $1 and name is not null')).toEqual([]);
+  });
+
+  it('does not flag a valid BETWEEN clause', () => {
+    expect(diagnosticsFor('select id from users where id between 1 and 10')).toEqual([]);
+  });
+
+  it('skips WHERE diagnostics entirely once a paren appears, rather than risking a false positive', () => {
+    expect(
+      diagnosticsFor("select id from users where id in (1, 2, 3) and naem = 'x'"),
+    ).toEqual([]);
+  });
+
+  it('does not let an ORDER BY alias bleed into WHERE-clause validation', () => {
+    expect(
+      diagnosticsFor("select id from users where name = 'ada' order by id desc"),
+    ).toEqual([]);
+  });
+
+  it('reports a WHERE-clause typo alongside a genuinely unrelated ORDER BY clause', () => {
+    expect(
+      diagnosticsFor('select id from users where naem = 1 order by id desc'),
+    ).toEqual([{ message: 'unknown column: naem', text: 'naem' }]);
+  });
 });

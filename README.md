@@ -205,7 +205,8 @@ library still parses your queries entirely at the type level with zero
 runtime codegen, same as always. The generated file is a normal `.ts` file —
 commit it, edit it by hand afterward, rename fields, anything. Running
 `generate` again just overwrites it with a fresh snapshot; nothing stays
-"synced" automatically.
+"synced" automatically — unless you opt into checking for that in CI with
+`--check` (below).
 
 | Flag | Required | Description |
 | ---- | -------- | ----------- |
@@ -213,6 +214,14 @@ commit it, edit it by hand afterward, rename fields, anything. Running
 | `--out` | no | Output file. Defaults to `./schema.ts`. |
 | `--dialect` | no | `postgres` \| `mysql` \| `sqlite` \| `mssql`. Auto-detected from the URL scheme (`postgres://`/`postgresql://`, `mysql://`, `mssql://`/`sqlserver://`); an ADO `Server=...` string also routes to `mssql` — falls back to `sqlite` for a bare file path, so it's only needed when that's ambiguous. |
 | `--schema` | no | Schema/database name to introspect. Defaults to `public` (Postgres), the connected database (MySQL), or `dbo` (SQL Server). Not used for SQLite. |
+| `--table` | no | Comma-separated list (`--table users,posts`). Only introspect these tables, instead of every table in the schema. |
+| `--exclude` | no | Comma-separated list. Skip these tables even if `--table` would otherwise include them. |
+| `--check` | no | Don't write `--out` — introspect and render as usual, then compare against the existing file. Exits `0` with no output if they match, `1` with a message telling you where they first differ (or that the file doesn't exist yet) if they don't. `--table`/`--exclude`/`--schema` apply identically, so the comparison stays meaningful. Useful in CI to catch a migration that ran without anyone regenerating the committed schema. |
+
+```bash
+# CI: fail the build if schema.ts has drifted from the real database
+npx @owlsql/core generate --url "$DATABASE_URL" --out schema.ts --check
+```
 
 `generate` needs the matching driver installed as a real dependency (`pg`,
 `mysql2`, or `mssql` — SQLite uses the `node:sqlite` builtin, Node ≥22.5). It
@@ -367,7 +376,9 @@ Recognized: `count`, `sum`, `avg`, `min`, `max`, `length`, `char_length`,
 `cume_dist` → `number`; `lower`, `upper`, `trim`, `ltrim`, `rtrim`, `concat` →
 `string`; `coalesce`, `nullif`, `lag`, `lead`, `first_value`, `last_value`,
 `nth_value` → `unknown`; `now`, `current_timestamp`, `current_date` → `Date`.
-Anything else resolves to `unknown`.
+Anything else resolves to `unknown`. This return-type table is
+dialect-agnostic, which isn't always what the driver actually hands back for
+`count`/`sum`/`avg` — see [Limitations](#limitations).
 
 ### 7. INSERT / UPDATE / DELETE with RETURNING
 
@@ -483,45 +494,74 @@ provides one), so an INSERT without `RETURNING` is no longer a black box.
 
 ### 11. Transactions
 
-There is no built-in transaction API yet — and there is a footgun to know
-about: **never run `BEGIN`/`COMMIT` through an executor bound to a pool.**
-Each `query()` may check out a *different* connection, so `BEGIN` runs on
-connection A and `COMMIT` on connection B, leaving an open transaction (and
-its locks) on a pooled connection that is later handed to another caller.
+There is a footgun to know about: **never run `BEGIN`/`COMMIT` through an
+executor bound to a pool.** Each `query()` may check out a *different*
+connection, so `BEGIN` runs on connection A and `COMMIT` on connection B,
+leaving an open transaction (and its locks) on a pooled connection that is
+later handed to another caller.
 
-The adapters accept anything with the right `query`/`execute` shape — a
-`pg.Pool`, `pg.Client` or `pg.PoolClient`; a mysql2 `Pool` or `Connection` —
-so pin one connection and scope a client to it:
+`pg`, `postgres.js`, `mysql2`, and `mssql` each ship a small transaction
+helper that pins one connection for the whole callback and handles
+begin/commit/rollback for you:
 
 ```ts
 import { Pool } from 'pg';
-import { createTypedDb } from '@owlsql/core';
-import { createPgExecutor } from '@owlsql/core/pg';
+import { createPgTransaction } from '@owlsql/core/pg';
 
 const pool = new Pool();
 
 async function transferFunds(from: number, to: number, amount: number) {
-  const client = await pool.connect();
-  const tx = createTypedDb<DB>(createPgExecutor(client));
-
-  try {
-    await client.query('begin');
+  await createPgTransaction<DB>(pool)(async (tx) => {
     await tx.query('update accounts set balance = balance - $1 where id = $2', amount, from);
     await tx.query('update accounts set balance = balance + $1 where id = $2', amount, to);
-    await client.query('commit');
-  } catch (error) {
-    await client.query('rollback');
-    throw error;
-  } finally {
-    client.release();
-  }
+  });
 }
 ```
 
-postgres.js has its own `sql.begin(...)` — build the executor from the
-transaction-scoped `sql` it hands you. Kysely users should use Kysely's
-`db.transaction()`. `node:sqlite` is a single connection, so plain
-`begin`/`commit` statements are safe there.
+`createPgTransaction<DB>(pool)` returns the function that actually runs the
+transaction — it's curried on `DB` because TypeScript can't partially infer
+type arguments; a single `createPgTransaction<DB>(pool, fn)` call would
+compile, but would silently stop inferring the callback's return type and
+type it `unknown` instead. Splitting `DB` into its own call keeps the second
+call (`(fn, options?)`) argument-only, so both the optional `options` and the
+callback's return type infer normally.
+
+The callback's `tx` is a full `TypedDb<DB>`, typed exactly like the one
+`createTypedDb` returns (pass `{ strict: true }` as the second argument to
+the inner call the same way: `createPgTransaction<DB>(pool)(fn, { strict:
+true })`). The transaction commits if the callback resolves and rolls back if
+it throws — a rejected `tx.query()` result (the normal `Result` error path)
+does *not* trigger a rollback by itself, only a thrown error does, same as
+everywhere else this library never throws on a query failure.
+
+`createMysql2Transaction<DB>(pool)(fn, options?)` and
+`createMssqlTransaction<DB>(pool)(fn, options?)` work the same way.
+`createPostgresJsTransaction<DB>(sql)(fn, options?)` wraps postgres.js's own
+`sql.begin(...)`, which already pins the connection and handles
+commit/rollback itself.
+
+Kysely users should use Kysely's own `db.transaction()`. `node:sqlite` is a
+single connection, so plain `begin`/`commit` statements are safe there and no
+helper is provided.
+
+Under the hood, each helper does exactly what you'd otherwise write by hand:
+
+```ts
+const client = await pool.connect();
+const tx = createTypedDb<DB>(createPgExecutor(client), { placeholders: 'dollar' });
+
+try {
+  await client.query('begin');
+  await tx.query('update accounts set balance = balance - $1 where id = $2', amount, from);
+  await tx.query('update accounts set balance = balance + $1 where id = $2', amount, to);
+  await client.query('commit');
+} catch (error) {
+  await client.query('rollback');
+  throw error;
+} finally {
+  client.release();
+}
+```
 
 ## Driver recipes
 
@@ -718,17 +758,21 @@ be present (there's no table to scope to otherwise); table-name completions
 after `FROM`/`JOIN` suggest every table in `DB`, filtered by whatever prefix
 you've typed. It also reports unknown columns, unknown tables, unknown
 aliases, and ambiguous unqualified columns (present in more than one joined
-table) as live editor diagnostics in the `SELECT` list and `FROM`/`JOIN`
-clause — the same checks strict mode (`{ strict: true }`) applies at compile
-time, surfaced as a squiggle while you type instead of only once the query
-is finished.
+table) as live editor diagnostics in the `SELECT` list, `FROM`/`JOIN` clause,
+and simple `WHERE` comparisons (`where naem = 'x'` squiggles `naem` the
+moment you type it) — the same checks strict mode (`{ strict: true }`)
+applies at compile time, surfaced as a squiggle while you type instead of
+only once the query is finished.
 
 **What it does not do** (documented scope, not bugs):
 
-- No diagnostics for the `WHERE` clause or other expressions — only the
-  `SELECT` list and `FROM`/`JOIN` table names are checked, matching what the
-  type-level parser itself validates (`WHERE` is scanned only for
-  parameter placeholders, never typed).
+- **`WHERE`-clause diagnostics cover simple comparisons only.** A column
+  token immediately before `=`/`<>`/`<`/`>`/`<=`/`>=`/`LIKE`/`ILIKE`/`IN`/
+  `BETWEEN`/`IS`, or `AND`/`OR`, or the end of the clause, is checked exactly
+  like a `SELECT`-list column. The moment a `WHERE` clause contains any `(`
+  or `)` at all — a subquery, a function call, a parenthesized group — the
+  whole clause is skipped rather than risked: no diagnostics for it, never a
+  wrong one. `HAVING`/`ORDER BY`/`GROUP BY` aren't checked at all.
 - The first `FROM <table>` is found with a regex, not a real SQL parser: a
   `FROM (subquery)` can make it lock onto a table name from inside the
   subquery instead of recognizing there's no real outer table yet.
@@ -789,6 +833,10 @@ ever required):
 | `createNodeSqliteExecutor(db)` | `@owlsql/core/node-sqlite` | `node:sqlite` `DatabaseSync` → `Executor`. |
 | `createMssqlExecutor(pool)` | `@owlsql/core/mssql` | `mssql` `ConnectionPool` → `Executor`, binding `@name` params. |
 | `createKyselyExecutor(db)` | `@owlsql/core/kysely` | `Kysely<DB>` → `Executor`, via `CompiledQuery.raw`. |
+| `createPgTransaction<DB>(pool)(fn, options?)` | `@owlsql/core/pg` | Pins a `PoolClient`, runs `fn(tx)` inside `BEGIN`/`COMMIT`/`ROLLBACK`. Curried on `DB` - see [Transactions](#11-transactions). |
+| `createMysql2Transaction<DB>(pool)(fn, options?)` | `@owlsql/core/mysql2` | Same shape, over a pinned mysql2 `Connection`. |
+| `createPostgresJsTransaction<DB>(sql)(fn, options?)` | `@owlsql/core/postgres` | Same shape, wrapping postgres.js's own `sql.begin(...)`. |
+| `createMssqlTransaction<DB>(pool)(fn, options?)` | `@owlsql/core/mssql` | Same shape, over a pinned mssql `Transaction`. |
 
 **`query` return type.** `query` resolves to
 `Result<Query<DB, Q>, QueryError>`. On success, `result.value` holds the typed
@@ -838,6 +886,7 @@ this.**
 | Backtick identifiers | `` select `id` from `users` `` (MySQL style) |
 | `TOP` clause | `select top 10 id from users`, `top (n)`, `top n percent`, `top n with ties` (SQL Server) |
 | `OUTPUT` clause | `insert ... output inserted.id values (...)` (SQL Server) |
+| `MERGE ... OUTPUT` | `merge into t as target using ... on ... when matched then ... output inserted.id, $action` (SQL Server) — see [Limitations](#limitations) |
 
 ## Limitations
 
@@ -860,10 +909,19 @@ This is a focused tool for the common read path, not a full SQL grammar:
 - **Window `OVER (...)` clauses are only used as a boundary**, not parsed for
   their own typing — `PARTITION BY`/`ORDER BY` content inside `OVER (...)` is
   discarded, not validated.
-- **Aggregates assume numeric output.** `min`/`max` resolve to `number` even
-  over a text column; unrecognized functions resolve to `unknown`. `lag`,
-  `lead`, `first_value`, `last_value`, `nth_value` resolve to `unknown` (their
-  real type depends on the argument, which isn't inspected).
+- **Aggregates assume numeric output, dialect-agnostically.** `min`/`max`
+  resolve to `number` even over a text column; unrecognized functions resolve
+  to `unknown`. `count`, `sum`, and `avg` also resolve to `number`, but that's
+  not always what comes back at runtime: with `pg`'s default config (no
+  custom `types` parser), `count(*)`/`count(col)` is `bigint` and
+  `sum(int_col)`/`avg(...)` is `numeric` at the SQL level, and `pg` decodes
+  both as JS strings to avoid precision loss — the same reason plain
+  `bigint`/`numeric` *columns* map to `string` (see [Type mapping follows
+  each driver's defaults](#1-describe-your-schema)). Cast at the call site
+  (`Number(rows[0].count)`, or a BigInt-aware conversion) if you need to do
+  arithmetic on it. `lag`, `lead`, `first_value`, `last_value`, `nth_value`
+  resolve to `unknown` (their real type depends on the argument, which isn't
+  inspected).
 - **`select *` across a join merges columns by name.** When two tables share a
   column name (e.g. both have `id`), the types are intersected rather than kept
   separate. Alias the columns to keep them distinct.
@@ -889,6 +947,14 @@ This is a focused tool for the common read path, not a full SQL grammar:
   only recognizes the `inserted`/`deleted` pseudo-table prefixes (they
   resolve against the statement's single table); `OUTPUT ... INTO @table` is
   not supported.
+- **`MERGE` types the target table and `OUTPUT` clause, not the merge logic
+  itself.** The `USING`/`ON`/`WHEN MATCHED`/`WHEN NOT MATCHED` branches aren't
+  parsed or validated — only `MERGE INTO <target>` (an explicit `INTO` is
+  required; the rarely-used `MERGE <target> USING ...` form without it isn't
+  recognized) and the trailing `OUTPUT` clause, resolved against the target
+  table the same way `OUTPUT` already works for `INSERT`/`UPDATE`/`DELETE`.
+  `OUTPUT $action` is recognized and typed as `'INSERT' | 'UPDATE' |
+  'DELETE'`.
 - **Unknown columns, tables, or aliases resolve to `unknown`** by default — pass
   `{ strict: true }` to turn them into a `QueryTypeError` instead.
 

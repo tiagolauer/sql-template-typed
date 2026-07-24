@@ -149,6 +149,16 @@ type OutputClauseColumns<S extends string, StopKeyword extends string> = AfterKe
     : ''
   : '';
 
+// MERGE's OUTPUT clause is always the last clause in the statement (nothing
+// meaningful follows it), so unlike INSERT/UPDATE/DELETE's OUTPUT it needs no
+// stop keyword to truncate at - it runs to the end of the (already
+// semicolon-stripped) string.
+type OutputClauseColumnsToEnd<S extends string> = AfterKeyword<S, 'output'> extends infer Rest
+  ? Rest extends string
+    ? Trim<Rest>
+    : ''
+  : '';
+
 type StripPseudoTableEntry<Entry extends string> = Lowercase<
   Qualifier<Trim<Entry>>
 > extends 'inserted' | 'deleted'
@@ -246,7 +256,18 @@ type ParseStatementNormalized<S extends string> = FirstWord<S> extends infer Key
               ];
               whereText: ExtractUpdateDeleteWhereText<S>;
             }
-          : never
+          : IsKeyword<Keyword, 'merge'> extends true
+            ? {
+                // The USING/WHEN branches aren't modeled - only the target
+                // table (for OUTPUT column resolution) and the trailing
+                // OUTPUT clause itself, mirroring how OUTPUT already works
+                // for INSERT/UPDATE/DELETE. Requires an explicit INTO; MERGE
+                // without it (legal but rare in practice) isn't recognized.
+                columns: StripPseudoTableQualifiers<OutputClauseColumnsToEnd<S>>;
+                sources: SingleSource<WordAfterKeyword<S, 'into'>>;
+                whereText: '';
+              }
+            : never
   : never;
 
 export type ParseStatement<S extends string> = ParseStatementNormalized<Normalize<S>>;
@@ -612,12 +633,21 @@ type StrictFunctionType<
     : Error
   : never;
 
+// MERGE's OUTPUT clause can select $action, a pseudo-column with no backing
+// table that reports which branch fired for each row - not a real column on
+// any source, so it's special-cased ahead of ordinary column resolution.
+type IsMergeActionPseudoColumn<Expression extends string> = Lowercase<Expression> extends '$action'
+  ? true
+  : false;
+
 export type ResolveColumnType<
   DB extends SchemaLike,
   Sources extends Source[],
   Expression extends string,
   Strict extends boolean,
-> = IsCaseExpression<Expression> extends true
+> = IsMergeActionPseudoColumn<Expression> extends true
+  ? 'INSERT' | 'UPDATE' | 'DELETE'
+  : IsCaseExpression<Expression> extends true
   ? SplitCaseExpression<Expression> extends { body: infer Body extends string }
     ? CaseExpressionType<DB, Sources, Body, Strict>
     : unknown

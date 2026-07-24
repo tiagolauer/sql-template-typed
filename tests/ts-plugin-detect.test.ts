@@ -140,4 +140,40 @@ describe('matchQueryLiteral', () => {
 
     expect(match).not.toBeNull();
   });
+
+  it('activates through an interface that extends TypedDb (issue #166 repro)', () => {
+    const match = run(`
+      import type { TypedDb } from '@owlsql/core';
+      interface DB { users: { id: number } }
+      interface AppDb extends TypedDb<DB> {}
+      declare const db: AppDb;
+      db.query(\`select 1\`);
+    `);
+
+    expect(match).not.toBeNull();
+  });
+
+  it('activates through a generic type parameter constrained to TypedDb (issue #166 repro)', () => {
+    const match = run(`
+      import type { TypedDb } from '@owlsql/core';
+      interface DB { users: { id: number } }
+      function run<T extends TypedDb<DB>>(db: T) {
+        db.query(\`select 1\`);
+      }
+    `);
+
+    expect(match).not.toBeNull();
+  });
+
+  it('does not activate through an interface extending an unrelated base', () => {
+    const match = run(`
+      interface DB { users: { id: number } }
+      interface Logger { log(sql: string): void }
+      interface AppLogger extends Logger {}
+      declare const logger: AppLogger;
+      logger.query(\`select 1\`);
+    `);
+
+    expect(match).toBeNull();
+  });
 });

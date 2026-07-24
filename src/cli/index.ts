@@ -14,11 +14,13 @@ Options:
   --schema <name>      Schema/database to introspect
   --table <a,b>        Only include the listed tables
   --exclude <a,b>      Skip the listed tables
+  --check              Check --out is up to date instead of writing it; exits 1
+                        if it has drifted. --table/--exclude/--schema still apply.
   --help               Show this help
   --version            Print the version
 `;
 
-const BOOLEAN_FLAGS = new Set(['help', 'version']);
+const BOOLEAN_FLAGS = new Set(['help', 'version', 'check']);
 
 const VALUE_FLAGS = new Set(['url', 'out', 'dialect', 'schema', 'table', 'exclude']);
 
@@ -155,16 +157,28 @@ async function main(): Promise<void> {
 
   const out = flags.get('out') ?? './schema.ts';
 
-  await runGenerate({
+  const result = await runGenerate({
     url,
     out,
     dialect: parseDialect(flags.get('dialect')),
     schema: flags.get('schema'),
     tables: parseTableList(flags.get('table')),
     exclude: parseTableList(flags.get('exclude')),
+    check: flags.has('check'),
   });
 
-  process.stdout.write(`Wrote ${out}\n`);
+  if (result.kind === 'written') {
+    process.stdout.write(`Wrote ${out}\n`);
+    return;
+  }
+
+  if (result.kind === 'upToDate') {
+    process.stdout.write(`${out} is up to date.\n`);
+    return;
+  }
+
+  process.stderr.write(`${out} is out of date - run generate to update it: ${result.summary}\n`);
+  process.exitCode = 1;
 }
 
 main().catch((error: unknown) => {

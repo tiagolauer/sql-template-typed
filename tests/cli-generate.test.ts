@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runGenerate, detectDialect } from '../src/cli/generate';
@@ -142,6 +142,101 @@ describe.skipIf(!sqliteAvailable)('runGenerate (end to end against a real sqlite
       ).rejects.toThrow('SQLite database file not found');
 
       expect(existsSync(missingFile)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('--check reports upToDate and does not write when --out already matches (issue #176 repro)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'owlsql-'));
+    const dbFile = join(dir, 'app.db');
+    const outFile = join(dir, 'schema.ts');
+
+    try {
+      const db = new (loadSqlite())(dbFile);
+      db.exec('create table users (id integer primary key, name text not null)');
+      db.close();
+
+      await runGenerate({ url: dbFile, out: outFile, dialect: 'sqlite' });
+      const written = readFileSync(outFile, 'utf8');
+
+      const result = await runGenerate({ url: dbFile, out: outFile, dialect: 'sqlite', check: true });
+
+      expect(result).toEqual({ kind: 'upToDate' });
+      expect(readFileSync(outFile, 'utf8')).toBe(written);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('--check reports drift and does not write when --out is stale', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'owlsql-'));
+    const dbFile = join(dir, 'app.db');
+    const outFile = join(dir, 'schema.ts');
+    const staleContent = 'export interface DB {\n  users: { id: number };\n}\n';
+
+    try {
+      const db = new (loadSqlite())(dbFile);
+      db.exec('create table users (id integer primary key, name text not null)');
+      db.close();
+
+      writeFileSync(outFile, staleContent, 'utf8');
+
+      const result = await runGenerate({ url: dbFile, out: outFile, dialect: 'sqlite', check: true });
+
+      expect(result.kind).toBe('drift');
+      if (result.kind === 'drift') {
+        expect(result.summary).toContain('first differs at line');
+      }
+      expect(readFileSync(outFile, 'utf8')).toBe(staleContent);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('--check reports drift without writing when --out does not exist yet', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'owlsql-'));
+    const dbFile = join(dir, 'app.db');
+    const outFile = join(dir, 'schema.ts');
+
+    try {
+      const db = new (loadSqlite())(dbFile);
+      db.exec('create table users (id integer primary key, name text not null)');
+      db.close();
+
+      const result = await runGenerate({ url: dbFile, out: outFile, dialect: 'sqlite', check: true });
+
+      expect(result).toEqual({ kind: 'drift', summary: 'the file does not exist yet.' });
+      expect(existsSync(outFile)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('--check applies --table/--exclude the same way a real generate would', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'owlsql-'));
+    const dbFile = join(dir, 'app.db');
+    const outFile = join(dir, 'schema.ts');
+
+    try {
+      const db = new (loadSqlite())(dbFile);
+      db.exec('create table users (id integer primary key, name text not null)');
+      db.exec('create table posts (id integer primary key, title text not null)');
+      db.close();
+
+      await runGenerate({ url: dbFile, out: outFile, dialect: 'sqlite', tables: ['users'] });
+
+      const matching = await runGenerate({
+        url: dbFile,
+        out: outFile,
+        dialect: 'sqlite',
+        tables: ['users'],
+        check: true,
+      });
+      expect(matching).toEqual({ kind: 'upToDate' });
+
+      const withoutFilter = await runGenerate({ url: dbFile, out: outFile, dialect: 'sqlite', check: true });
+      expect(withoutFilter.kind).toBe('drift');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
