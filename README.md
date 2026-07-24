@@ -838,6 +838,7 @@ this.**
 | Backtick identifiers | `` select `id` from `users` `` (MySQL style) |
 | `TOP` clause | `select top 10 id from users`, `top (n)`, `top n percent`, `top n with ties` (SQL Server) |
 | `OUTPUT` clause | `insert ... output inserted.id values (...)` (SQL Server) |
+| `MERGE ... OUTPUT` | `merge into t as target using ... on ... when matched then ... output inserted.id, $action` (SQL Server) — see [Limitations](#limitations) |
 
 ## Limitations
 
@@ -898,6 +899,14 @@ This is a focused tool for the common read path, not a full SQL grammar:
   only recognizes the `inserted`/`deleted` pseudo-table prefixes (they
   resolve against the statement's single table); `OUTPUT ... INTO @table` is
   not supported.
+- **`MERGE` types the target table and `OUTPUT` clause, not the merge logic
+  itself.** The `USING`/`ON`/`WHEN MATCHED`/`WHEN NOT MATCHED` branches aren't
+  parsed or validated — only `MERGE INTO <target>` (an explicit `INTO` is
+  required; the rarely-used `MERGE <target> USING ...` form without it isn't
+  recognized) and the trailing `OUTPUT` clause, resolved against the target
+  table the same way `OUTPUT` already works for `INSERT`/`UPDATE`/`DELETE`.
+  `OUTPUT $action` is recognized and typed as `'INSERT' | 'UPDATE' |
+  'DELETE'`.
 - **Unknown columns, tables, or aliases resolve to `unknown`** by default — pass
   `{ strict: true }` to turn them into a `QueryTypeError` instead.
 
