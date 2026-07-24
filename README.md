@@ -485,45 +485,74 @@ provides one), so an INSERT without `RETURNING` is no longer a black box.
 
 ### 11. Transactions
 
-There is no built-in transaction API yet — and there is a footgun to know
-about: **never run `BEGIN`/`COMMIT` through an executor bound to a pool.**
-Each `query()` may check out a *different* connection, so `BEGIN` runs on
-connection A and `COMMIT` on connection B, leaving an open transaction (and
-its locks) on a pooled connection that is later handed to another caller.
+There is a footgun to know about: **never run `BEGIN`/`COMMIT` through an
+executor bound to a pool.** Each `query()` may check out a *different*
+connection, so `BEGIN` runs on connection A and `COMMIT` on connection B,
+leaving an open transaction (and its locks) on a pooled connection that is
+later handed to another caller.
 
-The adapters accept anything with the right `query`/`execute` shape — a
-`pg.Pool`, `pg.Client` or `pg.PoolClient`; a mysql2 `Pool` or `Connection` —
-so pin one connection and scope a client to it:
+`pg`, `postgres.js`, `mysql2`, and `mssql` each ship a small transaction
+helper that pins one connection for the whole callback and handles
+begin/commit/rollback for you:
 
 ```ts
 import { Pool } from 'pg';
-import { createTypedDb } from '@owlsql/core';
-import { createPgExecutor } from '@owlsql/core/pg';
+import { createPgTransaction } from '@owlsql/core/pg';
 
 const pool = new Pool();
 
 async function transferFunds(from: number, to: number, amount: number) {
-  const client = await pool.connect();
-  const tx = createTypedDb<DB>(createPgExecutor(client));
-
-  try {
-    await client.query('begin');
+  await createPgTransaction<DB>(pool)(async (tx) => {
     await tx.query('update accounts set balance = balance - $1 where id = $2', amount, from);
     await tx.query('update accounts set balance = balance + $1 where id = $2', amount, to);
-    await client.query('commit');
-  } catch (error) {
-    await client.query('rollback');
-    throw error;
-  } finally {
-    client.release();
-  }
+  });
 }
 ```
 
-postgres.js has its own `sql.begin(...)` — build the executor from the
-transaction-scoped `sql` it hands you. Kysely users should use Kysely's
-`db.transaction()`. `node:sqlite` is a single connection, so plain
-`begin`/`commit` statements are safe there.
+`createPgTransaction<DB>(pool)` returns the function that actually runs the
+transaction — it's curried on `DB` because TypeScript can't partially infer
+type arguments; a single `createPgTransaction<DB>(pool, fn)` call would
+compile, but would silently stop inferring the callback's return type and
+type it `unknown` instead. Splitting `DB` into its own call keeps the second
+call (`(fn, options?)`) argument-only, so both the optional `options` and the
+callback's return type infer normally.
+
+The callback's `tx` is a full `TypedDb<DB>`, typed exactly like the one
+`createTypedDb` returns (pass `{ strict: true }` as the second argument to
+the inner call the same way: `createPgTransaction<DB>(pool)(fn, { strict:
+true })`). The transaction commits if the callback resolves and rolls back if
+it throws — a rejected `tx.query()` result (the normal `Result` error path)
+does *not* trigger a rollback by itself, only a thrown error does, same as
+everywhere else this library never throws on a query failure.
+
+`createMysql2Transaction<DB>(pool)(fn, options?)` and
+`createMssqlTransaction<DB>(pool)(fn, options?)` work the same way.
+`createPostgresJsTransaction<DB>(sql)(fn, options?)` wraps postgres.js's own
+`sql.begin(...)`, which already pins the connection and handles
+commit/rollback itself.
+
+Kysely users should use Kysely's own `db.transaction()`. `node:sqlite` is a
+single connection, so plain `begin`/`commit` statements are safe there and no
+helper is provided.
+
+Under the hood, each helper does exactly what you'd otherwise write by hand:
+
+```ts
+const client = await pool.connect();
+const tx = createTypedDb<DB>(createPgExecutor(client), { placeholders: 'dollar' });
+
+try {
+  await client.query('begin');
+  await tx.query('update accounts set balance = balance - $1 where id = $2', amount, from);
+  await tx.query('update accounts set balance = balance + $1 where id = $2', amount, to);
+  await client.query('commit');
+} catch (error) {
+  await client.query('rollback');
+  throw error;
+} finally {
+  client.release();
+}
+```
 
 ## Driver recipes
 
@@ -789,6 +818,10 @@ ever required):
 | `createNodeSqliteExecutor(db)` | `@owlsql/core/node-sqlite` | `node:sqlite` `DatabaseSync` → `Executor`. |
 | `createMssqlExecutor(pool)` | `@owlsql/core/mssql` | `mssql` `ConnectionPool` → `Executor`, binding `@name` params. |
 | `createKyselyExecutor(db)` | `@owlsql/core/kysely` | `Kysely<DB>` → `Executor`, via `CompiledQuery.raw`. |
+| `createPgTransaction<DB>(pool)(fn, options?)` | `@owlsql/core/pg` | Pins a `PoolClient`, runs `fn(tx)` inside `BEGIN`/`COMMIT`/`ROLLBACK`. Curried on `DB` - see [Transactions](#11-transactions). |
+| `createMysql2Transaction<DB>(pool)(fn, options?)` | `@owlsql/core/mysql2` | Same shape, over a pinned mysql2 `Connection`. |
+| `createPostgresJsTransaction<DB>(sql)(fn, options?)` | `@owlsql/core/postgres` | Same shape, wrapping postgres.js's own `sql.begin(...)`. |
+| `createMssqlTransaction<DB>(pool)(fn, options?)` | `@owlsql/core/mssql` | Same shape, over a pinned mssql `Transaction`. |
 
 **`query` return type.** `query` resolves to
 `Result<Query<DB, Q>, QueryError>`. On success, `result.value` holds the typed
