@@ -97,6 +97,13 @@ function describeCause(cause: unknown): string {
   return String(cause);
 }
 
+export function createTypedDb<DB extends SchemaLike>(
+  executor: Executor,
+): TypedDb<DB, false, PlaceholderStyle>;
+export function createTypedDb<DB extends SchemaLike, const Options extends TypedDbOptions>(
+  executor: Executor,
+  options?: Options,
+): TypedDb<DB, Options extends { strict: true } ? true : false, OptionsStyle<Options>>;
 export function createTypedDb<
   DB extends SchemaLike,
   const Options extends TypedDbOptions = TypedDbOptions,
