@@ -36,6 +36,13 @@ type LooseQueryStaysPermissive = Expect<
 
 declare const strictDb: ReturnType<typeof createTypedDb<DB, { strict: true }>>;
 declare const looseDb: ReturnType<typeof createTypedDb<DB, {}>>;
+declare const executorForArityCheck: (
+  sql: string,
+  params: readonly unknown[],
+) => Promise<unknown[]>;
+
+// @ts-expect-error passing options with only DB explicit must not silently default to non-strict
+createTypedDb<DB>(executorForArityCheck, { strict: true });
 
 export async function strictClientSurfacesErrors() {
   const good = await strictDb.query('select id, name from users');

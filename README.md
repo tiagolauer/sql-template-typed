@@ -405,7 +405,7 @@ By default an unknown column or table resolves to `unknown` (permissive). Pass
 human-readable message, so a typo is impossible to ignore:
 
 ```ts
-const db = createTypedDb<DB>(executor, { strict: true });
+const db = createTypedDb<DB, { strict: true }>(executor, { strict: true });
 
 const ok = await db.query('select id, name from users');
 //     ok.value ^? { id: number; name: string }[]
@@ -548,7 +548,7 @@ Under the hood, each helper does exactly what you'd otherwise write by hand:
 
 ```ts
 const client = await pool.connect();
-const tx = createTypedDb<DB>(createPgExecutor(client), { placeholders: 'dollar' });
+const tx = createTypedDb<DB, { placeholders: 'dollar' }>(createPgExecutor(client), { placeholders: 'dollar' });
 
 try {
   await client.query('begin');
@@ -796,7 +796,7 @@ only once the query is finished.
 
 | Export | Kind | Description |
 | ------ | ---- | ----------- |
-| `createTypedDb<DB>(executor, options?)` | function | Build a schema-bound client. `options.strict` enables [strict mode](#8-strict-mode--turn-typos-into-type-errors); `options.placeholders` enables [placeholder-style checking](#10-typed-parameters). |
+| `createTypedDb<DB>(executor)` / `createTypedDb<DB, Options>(executor, options?)` | function | Build a schema-bound client. When passing `options`, `DB` and `Options` must **both** be given explicitly — `createTypedDb<DB>(executor, options)` with a single type argument is a compile error, not a silent no-op. `options.strict` enables [strict mode](#8-strict-mode--turn-typos-into-type-errors); `options.placeholders` enables [placeholder-style checking](#10-typed-parameters). |
 | `TypedDb<DB, Strict?, Style?>` | interface | The client; has `query<Q>(sql, ...params)`. |
 | `TypedDbOptions` | interface | `{ strict?: boolean; placeholders?: PlaceholderStyle }`. |
 | `Executor` | type | `(sql: string, params: readonly unknown[]) => Promise<ExecutorResult>`. |
